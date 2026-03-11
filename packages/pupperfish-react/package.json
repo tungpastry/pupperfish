@@ -1,0 +1,39 @@
+{
+  "name": "@tungpastry/pupperfish-react",
+  "version": "0.1.0",
+  "description": "React UI kit and client abstractions for Pupperfish.",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "sideEffects": [
+    "./dist/styles.css"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "build": "npm run clean && tsc -p tsconfig.build.json && mkdir -p dist && cp src/styles.css dist/styles.css"
+  },
+  "peerDependencies": {
+    "@tungpastry/pupperfish-framework": "^0.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "paths": {
+      "@tungpastry/pupperfish-framework": ["packages/pupperfish-framework/dist/index.d.ts"],
+      "@tungpastry/pupperfish-framework/*": ["packages/pupperfish-framework/dist/*"]
+    }
+  }
+}

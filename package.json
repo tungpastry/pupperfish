@@ -1,0 +1,22 @@
+{
+  "name": "pupperfish",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "npm run lint --workspaces",
+    "build": "npm run build --workspaces",
+    "test": "node ./scripts/smoke-framework.mjs && node ./scripts/smoke-react.mjs",
+    "release:check": "npm run lint && npm run build && npm run test && npm pack --workspace @tungpastry/pupperfish-framework && npm pack --workspace @tungpastry/pupperfish-react"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "typescript": "^5.9.2"
+  }
+}
