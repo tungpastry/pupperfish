@@ -9,6 +9,7 @@ import type {
 
 export type PupperfishUiStatus = "idle" | "listening" | "thinking" | "answering" | "caution";
 export type PupperfishEvidenceTab = "evidence" | "charts" | "uploads" | "saved";
+export type PupperfishComposerSubmitMode = "enter-to-submit" | "meta-enter-to-submit";
 
 export type AssistantRenderMeta = {
   confidence: number | null;

@@ -14,6 +14,11 @@ It includes:
 
 The package is UI-only. Your host app must provide a working `PupperfishClient`.
 
+## Composer behavior
+- mặc định: `Enter` để submit
+- `Shift+Enter` để xuống dòng
+- nếu consumer cần behavior bảo thủ hơn, dùng `composerSubmitMode="meta-enter-to-submit"`
+
 ## Install
 ```bash
 npm install @tungpastry/pupperfish-react @tungpastry/pupperfish-framework react react-dom

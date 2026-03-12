@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import type { PupperfishEvidenceItem, PupperfishPlannerMode, PupperfishRetrieveResult } from "@tungpastry/pupperfish-framework";
 
@@ -12,6 +12,7 @@ import type {
   AssistantRenderMeta,
   PupperfishBranding,
   PupperfishClient,
+  PupperfishComposerSubmitMode,
   PupperfishEvidenceTab,
   PupperfishUiSignalStore,
   PupperfishUiStatus,
@@ -43,6 +44,53 @@ const LOW_CONFIDENCE_THRESHOLD = 0.45;
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function requestFormSubmit(form: HTMLFormElement | null): void {
+  if (!form) {
+    return;
+  }
+
+  if (typeof form.requestSubmit === "function") {
+    form.requestSubmit();
+    return;
+  }
+
+  form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+}
+
+type ComposerSubmitKeyOptions = {
+  submitMode: PupperfishComposerSubmitMode;
+  key: string;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+  isComposing: boolean;
+  hasContent: boolean;
+  busy: boolean;
+};
+
+export function shouldSubmitComposerKey({
+  submitMode,
+  key,
+  shiftKey,
+  ctrlKey,
+  metaKey,
+  altKey,
+  isComposing,
+  hasContent,
+  busy,
+}: ComposerSubmitKeyOptions): boolean {
+  if (key !== "Enter" || isComposing || !hasContent || busy) {
+    return false;
+  }
+
+  if (submitMode === "meta-enter-to-submit") {
+    return (ctrlKey || metaKey) && !shiftKey && !altKey;
+  }
+
+  return !shiftKey && !ctrlKey && !metaKey && !altKey;
 }
 
 function createClientMessageId(): string {
@@ -84,13 +132,19 @@ function evidencePreview(item: PupperfishEvidenceItem): string {
   return `${item.chartLabel}\n${item.symbol ?? ""} ${item.timeframe ?? ""}`;
 }
 
-type PupperfishChatShellProps = {
+export type PupperfishChatShellProps = {
   client: PupperfishClient;
   branding: PupperfishBranding;
   signalStore?: PupperfishUiSignalStore;
+  composerSubmitMode?: PupperfishComposerSubmitMode;
 };
 
-export function PupperfishChatShell({ client, branding, signalStore }: PupperfishChatShellProps) {
+export function PupperfishChatShell({
+  client,
+  branding,
+  signalStore,
+  composerSubmitMode = "enter-to-submit",
+}: PupperfishChatShellProps) {
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<PupperfishPlannerMode>("hybrid");
   const [busy, setBusy] = useState(false);
@@ -158,6 +212,13 @@ export function PupperfishChatShell({ client, branding, signalStore }: Pupperfis
   const activeChartsCount = activeRenderMeta?.chartsCount ?? 0;
   const activeConfidence = activeRenderMeta?.confidence ?? null;
   const activeLowEvidence = activeRenderMeta?.lowEvidence ?? false;
+  const composerHint = useMemo(
+    () =>
+      composerSubmitMode === "meta-enter-to-submit"
+        ? "Ctrl/Cmd+Enter để hỏi · Enter để xuống dòng"
+        : "Enter để hỏi · Shift+Enter để xuống dòng",
+    [composerSubmitMode],
+  );
 
   const evidenceLogEntryUids = useMemo(() => {
     const uids = new Set<string>();
@@ -290,6 +351,30 @@ export function PupperfishChatShell({ client, branding, signalStore }: Pupperfis
       setBusy(false);
     }
   }
+
+  const handleComposerKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (
+        !shouldSubmitComposerKey({
+          submitMode: composerSubmitMode,
+          key: event.key,
+          shiftKey: event.shiftKey,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          altKey: event.altKey,
+          isComposing: event.nativeEvent.isComposing,
+          hasContent: Boolean(query.trim()),
+          busy,
+        })
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      requestFormSubmit(event.currentTarget.form);
+    },
+    [busy, composerSubmitMode, query],
+  );
 
   async function loadUploadEntryDetail(entryUid: string): Promise<void> {
     const normalized = entryUid.trim();
@@ -530,6 +615,8 @@ export function PupperfishChatShell({ client, branding, signalStore }: Pupperfis
                 className="zen-input"
                 rows={3}
                 value={query}
+                aria-describedby="pupperfish-query-hint"
+                enterKeyHint={composerSubmitMode === "enter-to-submit" ? "send" : "enter"}
                 onChange={(event) => {
                   const nextValue = event.target.value;
                   setQuery(nextValue);
@@ -537,9 +624,13 @@ export function PupperfishChatShell({ client, branding, signalStore }: Pupperfis
                     setStatus(nextValue.trim() ? "listening" : "idle");
                   }
                 }}
+                onKeyDown={handleComposerKeyDown}
                 placeholder="Ví dụ: Tóm tắt các log NewYork hôm nay và điểm cần chú ý"
                 disabled={busy}
               />
+              <p id="pupperfish-query-hint" className="zen-helper-text">
+                {composerHint}
+              </p>
             </label>
 
             <button type="submit" className="zen-btn" disabled={busy || !query.trim()} aria-label={`Hỏi ${branding.assistantName}`}>

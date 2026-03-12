@@ -42,6 +42,11 @@ Pupperfish is **not** a standalone backend app. It does not ship a database, sto
 | `@tungpastry/pupperfish-framework` | Headless runtime and contracts | You want retrieval/answer orchestration without adopting a specific backend stack | `createPupperfishRuntime`, `contracts`, `types`, `planner`, `answer` |
 | `@tungpastry/pupperfish-react` | React UI kit and client abstractions | You want to embed a full-page assistant, widget launcher, dock, or chart-image gallery into a React app | `PupperfishChatShell`, `PupperfishWidgetShell`, `PupperfishDock`, `TradeImageGalleryManager` |
 
+UI defaults in `@tungpastry/pupperfish-react`:
+- composer shortcut mặc định: `Enter` để submit
+- `Shift+Enter` để xuống dòng
+- consumer có thể đổi sang `composerSubmitMode="meta-enter-to-submit"`
+
 ## Why this repo exists
 Pupperfish exists to separate reusable assistant behavior from application-specific infrastructure.
 

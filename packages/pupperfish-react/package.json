@@ -1,6 +1,6 @@
 {
   "name": "@tungpastry/pupperfish-react",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "React UI kit and client abstractions for Pupperfish.",
   "private": false,
   "type": "module",
@@ -25,7 +25,7 @@
     "build": "npm run clean && tsc -p tsconfig.build.json && mkdir -p dist && cp src/styles.css dist/styles.css"
   },
   "peerDependencies": {
-    "@tungpastry/pupperfish-framework": "^0.1.0",
+    "@tungpastry/pupperfish-framework": "^0.1.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
