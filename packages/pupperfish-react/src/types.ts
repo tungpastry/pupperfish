@@ -10,6 +10,20 @@ import type {
 export type PupperfishUiStatus = "idle" | "listening" | "thinking" | "answering" | "caution";
 export type PupperfishEvidenceTab = "evidence" | "charts" | "uploads" | "saved";
 export type PupperfishComposerSubmitMode = "enter-to-submit" | "meta-enter-to-submit";
+export type QueryPhase = "idle" | "submitting" | "routing" | "retrieving" | "generating" | "done" | "error";
+
+export type PendingAssistantState = {
+  visible: boolean;
+  phase: QueryPhase;
+  plannerMode: PupperfishPlannerMode | null;
+  startedAt: string | null;
+  elapsedSec: number;
+  header: string;
+  message: string;
+  isSlow: boolean;
+  requestId: string | null;
+  errorMessage?: string | null;
+};
 
 export type PupperfishChartViewerItem = {
   id: string;
@@ -46,6 +60,12 @@ export type PupperfishUiSignal = {
   chartsCount: number;
   hasError: boolean;
   mode: PupperfishPlannerMode | null;
+  pendingVisible?: boolean;
+  pendingPhase?: QueryPhase | null;
+  pendingPlannerMode?: PupperfishPlannerMode | null;
+  pendingMessage?: string | null;
+  pendingElapsedSec?: number | null;
+  pendingSlow?: boolean;
   updatedAt: string;
 };
 

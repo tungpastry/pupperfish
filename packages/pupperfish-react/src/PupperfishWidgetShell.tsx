@@ -10,6 +10,14 @@ type PupperfishWidgetShellProps = {
   branding: PupperfishBranding;
 };
 
+function formatElapsedDuration(totalSeconds: number | null | undefined): string {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds ?? 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+
+  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+}
+
 export function PupperfishWidgetShell({ signalStore, branding }: PupperfishWidgetShellProps) {
   const [open, setOpen] = useState(false);
   const [signal, setSignal] = useState<PupperfishUiSignal>(() => signalStore.read());
@@ -21,17 +29,21 @@ export function PupperfishWidgetShell({ signalStore, branding }: PupperfishWidge
   useEffect(() => {
     refreshSignal();
     const unsubscribe = signalStore.subscribe(refreshSignal);
-    const intervalId = window.setInterval(refreshSignal, 10000);
+    const intervalId = window.setInterval(refreshSignal, signal.pendingVisible ? 1000 : 10000);
 
     return () => {
       unsubscribe();
       window.clearInterval(intervalId);
     };
-  }, [refreshSignal, signalStore]);
+  }, [refreshSignal, signal.pendingVisible, signalStore]);
 
   const launcherLabel = branding.launcherLabel ?? `🐡 ${branding.assistantName}`;
   const fullPageHref = branding.fullPageHref ?? "/pupperfish";
   const fullPageCta = branding.fullPageCta ?? "Mở chatbot đầy đủ";
+  const pendingSummary = signal.pendingVisible
+    ? `${signal.pendingMessage ?? "Pupperfish đang xử lý..."}${signal.pendingPlannerMode ? ` · ${signal.pendingPlannerMode.toUpperCase()}` : ""}`
+    : null;
+  const pendingTimer = signal.pendingVisible ? `⏱ ${formatElapsedDuration(signal.pendingElapsedSec)}` : null;
 
   if (!open) {
     return (
@@ -72,11 +84,22 @@ export function PupperfishWidgetShell({ signalStore, branding }: PupperfishWidge
       </div>
 
       <p className="zen-pupperfish-widget__summary">
-        Trạng thái gần nhất: <strong>{formatPupperfishStatusLabel(signal.status)}</strong>
-        {signal.mode ? ` · ${signal.mode.toUpperCase()}` : ""}
+        {signal.pendingVisible ? (
+          <>
+            <strong>{pendingSummary}</strong>
+            {signal.pendingSlow ? " · query lâu hơn bình thường" : ""}
+          </>
+        ) : (
+          <>
+            Trạng thái gần nhất: <strong>{formatPupperfishStatusLabel(signal.status)}</strong>
+            {signal.mode ? ` · ${signal.mode.toUpperCase()}` : ""}
+          </>
+        )}
       </p>
       <p className="zen-pupperfish-widget__summary">
-        Last answer signal: {signal.evidenceCount > 0 ? `có evidence (${signal.evidenceCount})` : "chưa có evidence mạnh"}
+        {signal.pendingVisible
+          ? pendingTimer
+          : `Last answer signal: ${signal.evidenceCount > 0 ? `có evidence (${signal.evidenceCount})` : "chưa có evidence mạnh"}`}
       </p>
 
       <div className="zen-pupperfish-widget__actions">

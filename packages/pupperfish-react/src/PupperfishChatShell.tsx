@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { PupperfishEvidenceItem, PupperfishPlannerMode, PupperfishRetrieveResult } from "@tungpastry/pupperfish-framework";
 
@@ -15,8 +15,10 @@ import type {
   PupperfishClient,
   PupperfishComposerSubmitMode,
   PupperfishEvidenceTab,
+  PendingAssistantState,
   PupperfishUiSignalStore,
   PupperfishUiStatus,
+  QueryPhase,
 } from "./types.js";
 
 type ChatRole = "user" | "assistant";
@@ -42,9 +44,143 @@ const MODE_OPTIONS: Array<{ value: PupperfishPlannerMode; label: string }> = [
 ];
 
 const LOW_CONFIDENCE_THRESHOLD = 0.45;
+const PENDING_ASSISTANT_HEADER = "🐡 Pupperfish đang xử lý...";
+const PHASE_TRANSITIONS: Array<{ phase: QueryPhase; delayMs: number }> = [
+  { phase: "routing", delayMs: 150 },
+  { phase: "retrieving", delayMs: 700 },
+  { phase: "generating", delayMs: 2200 },
+];
+
+const MODE_LABELS: Record<PupperfishPlannerMode, string> = {
+  hybrid: "Hybrid",
+  sql: "Logs",
+  summary: "Summaries",
+  memory: "Memory",
+  image: "Images",
+};
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function formatElapsedDuration(totalSeconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+
+  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function resolvePhaseCopy(phase: QueryPhase, plannerMode: PupperfishPlannerMode | null): string {
+  if (phase === "submitting") {
+    return "Đang gửi truy vấn...";
+  }
+
+  if (phase === "routing") {
+    if (plannerMode === "sql") {
+      return "Đang chọn planner log phù hợp...";
+    }
+    if (plannerMode === "summary") {
+      return "Đang chọn planner summary phù hợp...";
+    }
+    if (plannerMode === "memory") {
+      return "Đang chọn planner memory phù hợp...";
+    }
+    if (plannerMode === "image") {
+      return "Đang chọn planner chart/image phù hợp...";
+    }
+    return "Đang chọn planner phù hợp...";
+  }
+
+  if (phase === "retrieving") {
+    if (plannerMode === "sql") {
+      return "Đang tìm log liên quan...";
+    }
+    if (plannerMode === "summary") {
+      return "Đang truy xuất summaries...";
+    }
+    if (plannerMode === "memory") {
+      return "Đang truy xuất memory...";
+    }
+    if (plannerMode === "image") {
+      return "Đang đối chiếu chart/image...";
+    }
+    return "Đang phối hợp nhiều nguồn dữ liệu...";
+  }
+
+  if (phase === "generating") {
+    if (plannerMode === "sql") {
+      return "Đang tổng hợp kết quả từ log...";
+    }
+    if (plannerMode === "summary") {
+      return "Đang gom các tóm tắt liên quan...";
+    }
+    if (plannerMode === "memory") {
+      return "Đang kiểm tra trí nhớ liên quan...";
+    }
+    if (plannerMode === "image") {
+      return "Đang đọc dữ liệu hình ảnh liên quan...";
+    }
+    return "Đang soạn câu trả lời...";
+  }
+
+  if (phase === "error") {
+    return "Có lỗi khi xử lý truy vấn. Bạn thử gửi lại câu hỏi nhé.";
+  }
+
+  return "";
+}
+
+function resolveSlowCopy(elapsedSec: number): string | null {
+  if (elapsedSec >= 20) {
+    return "Đang hoàn tất bước cuối...";
+  }
+  if (elapsedSec >= 12) {
+    return "Truy vấn đang mất lâu hơn bình thường.";
+  }
+  if (elapsedSec >= 8) {
+    return "Pupperfish vẫn đang xử lý...";
+  }
+  return null;
+}
+
+function createIdlePendingAssistantState(): PendingAssistantState {
+  return {
+    visible: false,
+    phase: "idle",
+    plannerMode: null,
+    startedAt: null,
+    elapsedSec: 0,
+    header: PENDING_ASSISTANT_HEADER,
+    message: "",
+    isSlow: false,
+    requestId: null,
+    errorMessage: null,
+  };
+}
+
+function buildPendingAssistantState(
+  requestId: string,
+  phase: QueryPhase,
+  plannerMode: PupperfishPlannerMode | null,
+  startedAtMs: number,
+  errorMessage?: string | null,
+): PendingAssistantState {
+  const elapsedSec = startedAtMs > 0 ? Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)) : 0;
+  const slowCopy = resolveSlowCopy(elapsedSec);
+
+  return {
+    visible: phase !== "idle" && phase !== "done",
+    phase,
+    plannerMode,
+    startedAt: startedAtMs > 0 ? new Date(startedAtMs).toISOString() : null,
+    elapsedSec,
+    header: PENDING_ASSISTANT_HEADER,
+    message: errorMessage ?? resolvePhaseCopy(phase, plannerMode),
+    isSlow: Boolean(slowCopy),
+    requestId,
+    errorMessage: errorMessage ?? null,
+  };
 }
 
 function requestFormSubmit(form: HTMLFormElement | null): void {
@@ -165,6 +301,13 @@ export function PupperfishChatShell({
   const [uploadEntryMeta, setUploadEntryMeta] = useState<Awaited<ReturnType<PupperfishClient["getLog"]>> | null>(null);
   const [chartViewerIndex, setChartViewerIndex] = useState(0);
   const [chartViewerOpen, setChartViewerOpen] = useState(false);
+  const [pendingAssistant, setPendingAssistant] = useState<PendingAssistantState>(() => createIdlePendingAssistantState());
+  const pendingRequestIdRef = useRef<string | null>(null);
+  const pendingPlannerModeRef = useRef<PupperfishPlannerMode | null>(null);
+  const pendingStartAtRef = useRef(0);
+  const pendingPhaseRef = useRef<QueryPhase>("idle");
+  const pendingPhaseTimeoutsRef = useRef<number[]>([]);
+  const pendingElapsedIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -254,10 +397,76 @@ export function PupperfishChatShell({
       lowEvidence: activeLowEvidence,
       evidenceCount: activeEvidenceCount,
       chartsCount: activeChartsCount,
-      hasError: Boolean(error),
+      hasError: Boolean(error) || pendingAssistant.phase === "error",
       mode,
+      pendingVisible: pendingAssistant.visible,
+      pendingPhase: pendingAssistant.visible || pendingAssistant.phase === "error" ? pendingAssistant.phase : null,
+      pendingPlannerMode: pendingAssistant.visible ? pendingAssistant.plannerMode : null,
+      pendingMessage: pendingAssistant.visible || pendingAssistant.phase === "error" ? pendingAssistant.message : null,
+      pendingElapsedSec:
+        pendingAssistant.visible || pendingAssistant.phase === "error" ? pendingAssistant.elapsedSec : null,
+      pendingSlow: pendingAssistant.isSlow,
     });
-  }, [signalStore, status, activeConfidence, activeLowEvidence, activeEvidenceCount, activeChartsCount, error, mode]);
+  }, [signalStore, status, activeConfidence, activeLowEvidence, activeEvidenceCount, activeChartsCount, error, mode, pendingAssistant]);
+
+  const clearPendingTimers = useCallback(() => {
+    for (const timeoutId of pendingPhaseTimeoutsRef.current) {
+      window.clearTimeout(timeoutId);
+    }
+    pendingPhaseTimeoutsRef.current = [];
+
+    if (pendingElapsedIntervalRef.current !== null) {
+      window.clearInterval(pendingElapsedIntervalRef.current);
+      pendingElapsedIntervalRef.current = null;
+    }
+  }, []);
+
+  const syncPendingAssistant = useCallback(
+    (requestId: string, phase: QueryPhase, errorMessage?: string | null) => {
+      if (pendingRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      pendingPhaseRef.current = phase;
+      setPendingAssistant(
+        buildPendingAssistantState(requestId, phase, pendingPlannerModeRef.current, pendingStartAtRef.current, errorMessage),
+      );
+    },
+    [],
+  );
+
+  const resetPendingAssistant = useCallback(() => {
+    pendingRequestIdRef.current = null;
+    pendingPlannerModeRef.current = null;
+    pendingStartAtRef.current = 0;
+    pendingPhaseRef.current = "idle";
+    clearPendingTimers();
+    setPendingAssistant(createIdlePendingAssistantState());
+  }, [clearPendingTimers]);
+
+  const beginPendingAssistant = useCallback(
+    (requestId: string, plannerMode: PupperfishPlannerMode) => {
+      clearPendingTimers();
+      pendingRequestIdRef.current = requestId;
+      pendingPlannerModeRef.current = plannerMode;
+      pendingStartAtRef.current = Date.now();
+      pendingPhaseRef.current = "submitting";
+      setPendingAssistant(buildPendingAssistantState(requestId, "submitting", plannerMode, pendingStartAtRef.current));
+
+      pendingPhaseTimeoutsRef.current = PHASE_TRANSITIONS.map(({ phase, delayMs }) =>
+        window.setTimeout(() => {
+          syncPendingAssistant(requestId, phase);
+        }, delayMs),
+      );
+
+      pendingElapsedIntervalRef.current = window.setInterval(() => {
+        syncPendingAssistant(requestId, pendingPhaseRef.current);
+      }, 1000);
+    },
+    [clearPendingTimers, syncPendingAssistant],
+  );
+
+  useEffect(() => () => clearPendingTimers(), [clearPendingTimers]);
 
   useEffect(() => {
     setChartViewerOpen(false);
@@ -312,6 +521,7 @@ export function PupperfishChatShell({
     if (!normalized || busy) {
       return;
     }
+    const requestId = createClientMessageId();
 
     const userMessage: ChatMessage = {
       id: createClientMessageId(),
@@ -327,6 +537,7 @@ export function PupperfishChatShell({
     setBusy(true);
     setError(null);
     setStatus("thinking");
+    beginPendingAssistant(requestId, mode);
 
     try {
       const result = await client.retrieve({
@@ -361,14 +572,18 @@ export function PupperfishChatShell({
         setIsRailOpen(true);
       }
 
+      resetPendingAssistant();
       const nextStatus: PupperfishUiStatus = renderMeta.lowConfidence ? "caution" : "answering";
       setStatus(nextStatus);
       window.setTimeout(() => {
         setStatus((previous) => (previous === nextStatus ? "idle" : previous));
       }, 900);
     } catch (cause) {
+      const errorMessage = cause instanceof Error ? cause.message : "Lỗi truy vấn Pupperfish.";
+      clearPendingTimers();
+      syncPendingAssistant(requestId, "error", "Có lỗi khi xử lý truy vấn. Bạn thử gửi lại câu hỏi nhé.");
       setStatus("caution");
-      setError(cause instanceof Error ? cause.message : "Lỗi truy vấn Pupperfish.");
+      setError(errorMessage);
     } finally {
       setBusy(false);
     }
@@ -424,7 +639,14 @@ export function PupperfishChatShell({
 
   const assistantLabel = branding.assistantTitle ?? `🐡 ${branding.assistantName}`;
   const headline = branding.headline ?? "Living UI / Status Instrument";
-  const subtitle = branding.subtitle ?? `Mode hiện tại: ${mode}. Trạng thái: ${formatPupperfishStatusLabel(status)}.`;
+  const pendingSlowCopy = resolveSlowCopy(pendingAssistant.elapsedSec);
+  const subtitle =
+    branding.subtitle ??
+    (pendingAssistant.visible
+      ? `${pendingAssistant.message} · ⏱ ${formatElapsedDuration(pendingAssistant.elapsedSec)}${
+          pendingAssistant.plannerMode ? ` · ${MODE_LABELS[pendingAssistant.plannerMode]}` : ""
+        }`
+      : `Mode hiện tại: ${mode}. Trạng thái: ${formatPupperfishStatusLabel(status)}.`);
   const productLabel = branding.productLabel ?? `${branding.assistantName} (Zen Pro)`;
   const homeHref = branding.homeHref ?? "/";
   const homeCta = branding.homeCta ?? "Về ứng dụng";
@@ -610,6 +832,41 @@ export function PupperfishChatShell({
                 </article>
               );
             })}
+
+            {pendingAssistant.visible ? (
+              <article
+                className={[
+                  "zen-pf-message",
+                  "zen-pf-message--assistant",
+                  "zen-pf-message--pending",
+                  pendingAssistant.phase === "error" ? "zen-pf-message--pending-error" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                role={pendingAssistant.phase === "error" ? "alert" : undefined}
+              >
+                <p className="zen-pf-message__meta">
+                  <strong>
+                    <span className="zen-pf-inline">
+                      <span className="zen-pf-emoji zen-pf-emoji--prefix" aria-hidden="true">
+                        🐡
+                      </span>
+                      <span>{branding.assistantName}</span>
+                    </span>
+                  </strong>
+                  <span className="zen-pf-pending__phase">{pendingAssistant.phase.toUpperCase()}</span>
+                  {pendingAssistant.plannerMode ? (
+                    <span className="zen-pf-pending__mode">{MODE_LABELS[pendingAssistant.plannerMode]}</span>
+                  ) : null}
+                </p>
+                <div className="zen-pf-pending">
+                  <p className="zen-pf-pending__header">{pendingAssistant.header}</p>
+                  <p className="zen-pf-pending__body">{pendingAssistant.message}</p>
+                  {pendingSlowCopy ? <p className="zen-pf-pending__slow">{pendingSlowCopy}</p> : null}
+                  <p className="zen-pf-pending__timer">{`⏱ Đã xử lý: ${formatElapsedDuration(pendingAssistant.elapsedSec)}`}</p>
+                </div>
+              </article>
+            ) : null}
           </div>
 
           <form className="zen-pupperfish-chat__composer" onSubmit={handleSubmit}>
@@ -669,7 +926,7 @@ export function PupperfishChatShell({
             </button>
           </form>
 
-          {error ? <p className="zen-inline-error">{error}</p> : null}
+          {error && pendingAssistant.phase !== "error" ? <p className="zen-inline-error">{error}</p> : null}
         </article>
 
         {isMobileRail && isRailOpen ? (

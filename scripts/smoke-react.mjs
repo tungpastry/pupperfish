@@ -9,6 +9,7 @@ import {
   PupperfishChartViewer,
   PupperfishChatShell,
   PupperfishDock,
+  PupperfishWidgetShell,
   TradeImageGalleryManager,
   shouldSubmitComposerKey,
 } from "../packages/pupperfish-react/dist/index.js";
@@ -130,6 +131,48 @@ function createClient(overrides = {}) {
   };
 }
 
+function createSignalStore(initial = {}) {
+  let signal = {
+    status: "idle",
+    confidence: null,
+    lowEvidence: false,
+    evidenceCount: 0,
+    chartsCount: 0,
+    hasError: false,
+    mode: null,
+    pendingVisible: false,
+    pendingPhase: null,
+    pendingPlannerMode: null,
+    pendingMessage: null,
+    pendingElapsedSec: null,
+    pendingSlow: false,
+    updatedAt: "",
+    ...initial,
+  };
+  const listeners = new Set();
+
+  return {
+    read() {
+      return signal;
+    },
+    write(nextSignal) {
+      signal = {
+        ...signal,
+        ...nextSignal,
+        updatedAt: new Date().toISOString(),
+      };
+      for (const listener of listeners) {
+        listener();
+      }
+      return signal;
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
 async function renderChatShell(options = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
@@ -145,6 +188,7 @@ async function renderChatShell(options = {}) {
           ...options.branding,
         },
         composerSubmitMode: options.composerSubmitMode,
+        signalStore: options.signalStore,
       }),
     );
   });
@@ -156,6 +200,35 @@ async function renderChatShell(options = {}) {
     root,
     container,
     textarea,
+    cleanup() {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    },
+  };
+}
+
+async function renderWidget(options = {}) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  await act(async () => {
+    root.render(
+      React.createElement(PupperfishWidgetShell, {
+        signalStore: options.signalStore ?? createSignalStore(),
+        branding: {
+          assistantName: "Pupperfish",
+          ...options.branding,
+        },
+      }),
+    );
+  });
+
+  return {
+    root,
+    container,
     cleanup() {
       act(() => {
         root.unmount();
@@ -497,6 +570,106 @@ async function runChartViewerTests() {
   }
 }
 
+async function runLoadingUxTests() {
+  if (!JSDOM) {
+    return;
+  }
+
+  let cleanupDom = null;
+
+  try {
+    cleanupDom = installDom();
+
+    {
+      let resolveRetrieve;
+      const signalStore = createSignalStore();
+      const view = await renderChatShell({
+        signalStore,
+        clientOverrides: {
+          retrieve() {
+            return new Promise((resolve) => {
+              resolveRetrieve = resolve;
+            });
+          },
+        },
+      });
+
+      await act(async () => {
+        view.textarea.value = "long running query";
+        view.textarea.dispatchEvent(new window.Event("input", { bubbles: true }));
+      });
+
+      await act(async () => {
+        view.textarea.form.requestSubmit();
+      });
+
+      assert.ok(view.container.textContent.includes("🐡 Pupperfish đang xử lý..."));
+      assert.ok(view.container.textContent.includes("Đang gửi truy vấn..."));
+
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 850));
+      });
+
+      assert.ok(view.container.textContent.includes("Đang phối hợp nhiều nguồn dữ liệu..."));
+
+      await act(async () => {
+        await new Promise((resolve) => window.setTimeout(resolve, 1600));
+      });
+
+      assert.ok(view.container.textContent.includes("Đang soạn câu trả lời..."));
+      assert.equal(signalStore.read().pendingVisible, true);
+      assert.equal(signalStore.read().pendingPhase, "generating");
+      assert.ok((signalStore.read().pendingElapsedSec ?? 0) >= 2);
+
+      await act(async () => {
+        resolveRetrieve({
+          requestUid: "req_pending",
+          convoUid: "convo_pending",
+          mode: "hybrid",
+          answer: "Final answer",
+          confidence: 0.81,
+          assumptions: [],
+          evidence: [],
+          charts: [],
+          memories: [],
+          sources: [],
+          latencyMs: 5,
+        });
+        await Promise.resolve();
+      });
+
+      assert.equal(view.container.textContent.includes("🐡 Pupperfish đang xử lý..."), false);
+      assert.ok(view.container.textContent.includes("Final answer"));
+      assert.equal(signalStore.read().pendingVisible, false);
+      view.cleanup();
+    }
+
+    {
+      const signalStore = createSignalStore({
+        status: "thinking",
+        pendingVisible: true,
+        pendingPhase: "retrieving",
+        pendingPlannerMode: "hybrid",
+        pendingMessage: "Đang phối hợp nhiều nguồn dữ liệu...",
+        pendingElapsedSec: 9,
+        pendingSlow: true,
+      });
+      const view = await renderWidget({ signalStore });
+
+      await act(async () => {
+        const launcher = view.container.querySelector(".zen-pupperfish-launcher");
+        launcher.click();
+      });
+
+      assert.ok(view.container.textContent.includes("Đang phối hợp nhiều nguồn dữ liệu..."));
+      assert.ok(view.container.textContent.includes("⏱ 00:09"));
+      view.cleanup();
+    }
+  } finally {
+    cleanupDom?.();
+  }
+}
+
 const dockHtml = renderToString(
   React.createElement(PupperfishDock, {
     status: "idle",
@@ -543,6 +716,7 @@ assert.ok(viewerHtml.includes("Static viewer"));
 
 await runComposerKeyboardTests();
 await runChartViewerTests();
+await runLoadingUxTests();
 if (!JSDOM) {
   console.log("react smoke: jsdom unavailable, DOM interaction tests skipped");
 }

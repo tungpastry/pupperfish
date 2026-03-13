@@ -1,6 +1,6 @@
 import type { PupperfishPlannerMode } from "@tungpastry/pupperfish-framework";
 
-import type { PupperfishUiSignal, PupperfishUiSignalStore, PupperfishUiStatus } from "./types.js";
+import type { PupperfishUiSignal, PupperfishUiSignalStore, PupperfishUiStatus, QueryPhase } from "./types.js";
 
 const DEFAULT_SIGNAL: PupperfishUiSignal = {
   status: "idle",
@@ -10,8 +10,26 @@ const DEFAULT_SIGNAL: PupperfishUiSignal = {
   chartsCount: 0,
   hasError: false,
   mode: null,
+  pendingVisible: false,
+  pendingPhase: null,
+  pendingPlannerMode: null,
+  pendingMessage: null,
+  pendingElapsedSec: null,
+  pendingSlow: false,
   updatedAt: "",
 };
+
+function normalizeQueryPhase(input: unknown): QueryPhase | null {
+  return input === "idle" ||
+    input === "submitting" ||
+    input === "routing" ||
+    input === "retrieving" ||
+    input === "generating" ||
+    input === "done" ||
+    input === "error"
+    ? input
+    : null;
+}
 
 function normalizeSignal(input: unknown): PupperfishUiSignal {
   if (!input || typeof input !== "object") {
@@ -39,6 +57,12 @@ function normalizeSignal(input: unknown): PupperfishUiSignal {
     chartsCount: Number.isFinite(candidate.chartsCount) ? Math.max(0, Number(candidate.chartsCount)) : 0,
     hasError: Boolean(candidate.hasError),
     mode: typeof candidate.mode === "string" ? (candidate.mode as PupperfishPlannerMode) : null,
+    pendingVisible: Boolean(candidate.pendingVisible),
+    pendingPhase: normalizeQueryPhase(candidate.pendingPhase),
+    pendingPlannerMode: typeof candidate.pendingPlannerMode === "string" ? (candidate.pendingPlannerMode as PupperfishPlannerMode) : null,
+    pendingMessage: typeof candidate.pendingMessage === "string" ? candidate.pendingMessage : null,
+    pendingElapsedSec: Number.isFinite(candidate.pendingElapsedSec) ? Math.max(0, Number(candidate.pendingElapsedSec)) : null,
+    pendingSlow: Boolean(candidate.pendingSlow),
     updatedAt: typeof candidate.updatedAt === "string" ? candidate.updatedAt : "",
   };
 }

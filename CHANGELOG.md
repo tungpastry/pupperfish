@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- Thêm loading UX theo phase cho `PupperfishChatShell` với bubble assistant tạm, timer, phase copy và slow-query copy.
+- Đồng bộ pending query state sang `PupperfishWidgetShell` qua signal store để widget phản ánh truy vấn đang chạy.
+
 ## 0.1.3
 
 - Thêm `note` vào `PupperfishImageEvidence` và truyền `note` vào chart viewer metadata của `PupperfishChatShell`.
