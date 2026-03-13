@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5
+
+- Thêm prompt history recall cho `PupperfishChatShell` với `ArrowUp/ArrowDown`, restore draft đang gõ dở, và persistence qua `localStorage`.
+- Bổ sung additive props `promptHistoryEnabled`, `promptHistoryStorageKey`, `promptHistoryLimit` để consumer có thể bật/tắt hoặc đổi key lưu history.
+
 ## 0.1.4
 
 - Thêm loading UX theo phase cho `PupperfishChatShell` với bubble assistant tạm, timer, phase copy và slow-query copy.

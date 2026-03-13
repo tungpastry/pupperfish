@@ -45,6 +45,8 @@ const MODE_OPTIONS: Array<{ value: PupperfishPlannerMode; label: string }> = [
 
 const LOW_CONFIDENCE_THRESHOLD = 0.45;
 const PENDING_ASSISTANT_HEADER = "🐡 Pupperfish đang xử lý...";
+const DEFAULT_PROMPT_HISTORY_STORAGE_KEY = "pupperfish-prompt-history-v1";
+const DEFAULT_PROMPT_HISTORY_LIMIT = 50;
 const PHASE_TRANSITIONS: Array<{ phase: QueryPhase; delayMs: number }> = [
   { phase: "routing", delayMs: 150 },
   { phase: "retrieving", delayMs: 700 },
@@ -157,6 +159,66 @@ function createIdlePendingAssistantState(): PendingAssistantState {
     requestId: null,
     errorMessage: null,
   };
+}
+
+function clampPromptHistoryLimit(limit: number): number {
+  if (!Number.isFinite(limit)) {
+    return DEFAULT_PROMPT_HISTORY_LIMIT;
+  }
+
+  return Math.max(1, Math.floor(limit));
+}
+
+function readPromptHistory(storageKey: string, limit: number): string[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+function writePromptHistory(storageKey: string, promptHistory: string[]): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    if (promptHistory.length < 1) {
+      window.localStorage.removeItem(storageKey);
+      return;
+    }
+
+    window.localStorage.setItem(storageKey, JSON.stringify(promptHistory));
+  } catch {
+    // Ignore storage failures. Prompt history is a progressive enhancement.
+  }
+}
+
+function isTextareaCaretAtStart(textarea: HTMLTextAreaElement): boolean {
+  return textarea.selectionStart === 0 && textarea.selectionEnd === 0;
+}
+
+function isTextareaCaretAtEnd(textarea: HTMLTextAreaElement): boolean {
+  const length = textarea.value.length;
+  return textarea.selectionStart === length && textarea.selectionEnd === length;
 }
 
 function buildPendingAssistantState(
@@ -274,6 +336,9 @@ export type PupperfishChatShellProps = {
   branding: PupperfishBranding;
   signalStore?: PupperfishUiSignalStore;
   composerSubmitMode?: PupperfishComposerSubmitMode;
+  promptHistoryEnabled?: boolean;
+  promptHistoryStorageKey?: string;
+  promptHistoryLimit?: number;
 };
 
 export function PupperfishChatShell({
@@ -281,8 +346,18 @@ export function PupperfishChatShell({
   branding,
   signalStore,
   composerSubmitMode = "enter-to-submit",
+  promptHistoryEnabled = true,
+  promptHistoryStorageKey = DEFAULT_PROMPT_HISTORY_STORAGE_KEY,
+  promptHistoryLimit = DEFAULT_PROMPT_HISTORY_LIMIT,
 }: PupperfishChatShellProps) {
   const [query, setQuery] = useState("");
+  const [promptHistory, setPromptHistory] = useState<string[]>(() =>
+    promptHistoryEnabled
+      ? readPromptHistory(promptHistoryStorageKey, clampPromptHistoryLimit(promptHistoryLimit))
+      : [],
+  );
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const [draftBeforeHistoryNav, setDraftBeforeHistoryNav] = useState<string | null>(null);
   const [mode, setMode] = useState<PupperfishPlannerMode>("hybrid");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<PupperfishUiStatus>("idle");
@@ -308,6 +383,28 @@ export function PupperfishChatShell({
   const pendingPhaseRef = useRef<QueryPhase>("idle");
   const pendingPhaseTimeoutsRef = useRef<number[]>([]);
   const pendingElapsedIntervalRef = useRef<number | null>(null);
+  const normalizedPromptHistoryLimit = useMemo(() => clampPromptHistoryLimit(promptHistoryLimit), [promptHistoryLimit]);
+
+  useEffect(() => {
+    if (!promptHistoryEnabled) {
+      setPromptHistory([]);
+      setHistoryIndex(null);
+      setDraftBeforeHistoryNav(null);
+      return;
+    }
+
+    setPromptHistory(readPromptHistory(promptHistoryStorageKey, normalizedPromptHistoryLimit));
+    setHistoryIndex(null);
+    setDraftBeforeHistoryNav(null);
+  }, [promptHistoryEnabled, promptHistoryStorageKey, normalizedPromptHistoryLimit]);
+
+  useEffect(() => {
+    if (!promptHistoryEnabled) {
+      return;
+    }
+
+    writePromptHistory(promptHistoryStorageKey, promptHistory.slice(0, normalizedPromptHistoryLimit));
+  }, [promptHistory, promptHistoryEnabled, promptHistoryStorageKey, normalizedPromptHistoryLimit]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -375,9 +472,13 @@ export function PupperfishChatShell({
   const composerHint = useMemo(
     () =>
       composerSubmitMode === "meta-enter-to-submit"
-        ? "Ctrl/Cmd+Enter để hỏi · Enter để xuống dòng"
-        : "Enter để hỏi · Shift+Enter để xuống dòng",
-    [composerSubmitMode],
+        ? promptHistoryEnabled
+          ? "Ctrl/Cmd+Enter để hỏi · Enter để xuống dòng · ↑/↓ để gọi lại prompt gần đây"
+          : "Ctrl/Cmd+Enter để hỏi · Enter để xuống dòng"
+        : promptHistoryEnabled
+          ? "Enter để hỏi · Shift+Enter để xuống dòng · ↑/↓ để gọi lại prompt gần đây"
+          : "Enter để hỏi · Shift+Enter để xuống dòng",
+    [composerSubmitMode, promptHistoryEnabled],
   );
 
   const evidenceLogEntryUids = useMemo(() => {
@@ -473,6 +574,30 @@ export function PupperfishChatShell({
     setChartViewerIndex(0);
   }, [activeAssistant?.id]);
 
+  const commitPromptToHistory = useCallback(
+    (prompt: string) => {
+      if (!promptHistoryEnabled) {
+        return;
+      }
+
+      const normalizedPrompt = prompt.trim();
+      if (!normalizedPrompt) {
+        return;
+      }
+
+      setPromptHistory((previous) => {
+        if (previous[0] === normalizedPrompt) {
+          return previous;
+        }
+
+        return [normalizedPrompt, ...previous].slice(0, normalizedPromptHistoryLimit);
+      });
+      setHistoryIndex(null);
+      setDraftBeforeHistoryNav(null);
+    },
+    [normalizedPromptHistoryLimit, promptHistoryEnabled],
+  );
+
   const setActiveTab = useCallback((tab: PupperfishEvidenceTab) => {
     setActiveSelection((previous) => ({
       ...previous,
@@ -533,6 +658,7 @@ export function PupperfishChatShell({
     };
 
     setMessages((previous) => [...previous, userMessage]);
+    commitPromptToHistory(normalized);
     setQuery("");
     setBusy(true);
     setError(null);
@@ -591,6 +717,42 @@ export function PupperfishChatShell({
 
   const handleComposerKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
+      const nativeKeyboardEvent = event.nativeEvent as globalThis.KeyboardEvent & { isComposing?: boolean };
+      const isComposing = Boolean(nativeKeyboardEvent.isComposing);
+
+      if (promptHistoryEnabled && !busy && !isComposing && promptHistory.length > 0) {
+        if (event.key === "ArrowUp" && isTextareaCaretAtStart(event.currentTarget)) {
+          event.preventDefault();
+          setHistoryIndex((previous) => {
+            if (previous === null) {
+              setDraftBeforeHistoryNav(query);
+              setQuery(promptHistory[0] ?? "");
+              return 0;
+            }
+
+            const nextIndex = Math.min(previous + 1, promptHistory.length - 1);
+            setQuery(promptHistory[nextIndex] ?? "");
+            return nextIndex;
+          });
+          return;
+        }
+
+        if (event.key === "ArrowDown" && historyIndex !== null && isTextareaCaretAtEnd(event.currentTarget)) {
+          event.preventDefault();
+
+          if (historyIndex <= 0) {
+            setHistoryIndex(null);
+            setQuery(draftBeforeHistoryNav ?? "");
+            return;
+          }
+
+          const nextIndex = historyIndex - 1;
+          setHistoryIndex(nextIndex);
+          setQuery(promptHistory[nextIndex] ?? "");
+          return;
+        }
+      }
+
       if (
         !shouldSubmitComposerKey({
           submitMode: composerSubmitMode,
@@ -599,7 +761,7 @@ export function PupperfishChatShell({
           ctrlKey: event.ctrlKey,
           metaKey: event.metaKey,
           altKey: event.altKey,
-          isComposing: event.nativeEvent.isComposing,
+          isComposing,
           hasContent: Boolean(query.trim()),
           busy,
         })
@@ -610,7 +772,7 @@ export function PupperfishChatShell({
       event.preventDefault();
       requestFormSubmit(event.currentTarget.form);
     },
-    [busy, composerSubmitMode, query],
+    [busy, composerSubmitMode, draftBeforeHistoryNav, historyIndex, promptHistory, promptHistoryEnabled, query],
   );
 
   async function loadUploadEntryDetail(entryUid: string): Promise<void> {
@@ -898,6 +1060,9 @@ export function PupperfishChatShell({
                 enterKeyHint={composerSubmitMode === "enter-to-submit" ? "send" : "enter"}
                 onChange={(event) => {
                   const nextValue = event.target.value;
+                  if (historyIndex !== null) {
+                    setHistoryIndex(null);
+                  }
                   setQuery(nextValue);
                   if (!busy) {
                     setStatus(nextValue.trim() ? "listening" : "idle");

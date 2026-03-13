@@ -1,6 +1,6 @@
 {
   "name": "@tungpastry/pupperfish-framework",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Headless Pupperfish runtime and contracts for host apps.",
   "private": false,
   "type": "module",

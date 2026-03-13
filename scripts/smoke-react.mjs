@@ -188,6 +188,9 @@ async function renderChatShell(options = {}) {
           ...options.branding,
         },
         composerSubmitMode: options.composerSubmitMode,
+        promptHistoryEnabled: options.promptHistoryEnabled,
+        promptHistoryStorageKey: options.promptHistoryStorageKey,
+        promptHistoryLimit: options.promptHistoryLimit,
         signalStore: options.signalStore,
       }),
     );
@@ -287,6 +290,25 @@ function createKeydown(key, options = {}) {
   return event;
 }
 
+async function updateTextarea(textarea, nextValue) {
+  await act(async () => {
+    textarea.value = nextValue;
+    textarea.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+}
+
+async function submitComposer(textarea) {
+  await act(async () => {
+    textarea.form.requestSubmit();
+  });
+}
+
+async function dispatchTextareaKeydown(textarea, key, options = {}) {
+  await act(async () => {
+    textarea.dispatchEvent(createKeydown(key, options));
+  });
+}
+
 async function runComposerKeyboardTests() {
   if (!JSDOM) {
     return;
@@ -296,12 +318,13 @@ async function runComposerKeyboardTests() {
 
   try {
     cleanupDom = installDom();
+    window.localStorage.clear();
 
     {
       const view = await renderChatShell();
       const hint = view.container.querySelector("#pupperfish-query-hint");
       assert.equal(view.textarea.getAttribute("enterkeyhint"), "send");
-      assert.equal(hint?.textContent?.trim(), "Enter để hỏi · Shift+Enter để xuống dòng");
+      assert.equal(hint?.textContent?.trim(), "Enter để hỏi · Shift+Enter để xuống dòng · ↑/↓ để gọi lại prompt gần đây");
       view.cleanup();
     }
 
@@ -311,7 +334,7 @@ async function runComposerKeyboardTests() {
       });
       const hint = view.container.querySelector("#pupperfish-query-hint");
       assert.equal(view.textarea.getAttribute("enterkeyhint"), "enter");
-      assert.equal(hint?.textContent?.trim(), "Ctrl/Cmd+Enter để hỏi · Enter để xuống dòng");
+      assert.equal(hint?.textContent?.trim(), "Ctrl/Cmd+Enter để hỏi · Enter để xuống dòng · ↑/↓ để gọi lại prompt gần đây");
       view.cleanup();
     }
 
@@ -420,6 +443,90 @@ async function runComposerKeyboardTests() {
         }),
         true,
       );
+    }
+
+    {
+      const storageKey = "pupperfish-prompt-history-smoke";
+      const view = await renderChatShell({
+        promptHistoryStorageKey: storageKey,
+        promptHistoryLimit: 3,
+      });
+
+      await updateTextarea(view.textarea, "A");
+      await submitComposer(view.textarea);
+      await updateTextarea(view.textarea, "B");
+      await submitComposer(view.textarea);
+      await updateTextarea(view.textarea, "C");
+      await submitComposer(view.textarea);
+
+      await updateTextarea(view.textarea, "draft đang gõ dở");
+      view.textarea.setSelectionRange(0, 0);
+      await dispatchTextareaKeydown(view.textarea, "ArrowUp");
+      assert.equal(view.textarea.value, "C");
+
+      view.textarea.setSelectionRange(0, 0);
+      await dispatchTextareaKeydown(view.textarea, "ArrowUp");
+      assert.equal(view.textarea.value, "B");
+
+      view.textarea.setSelectionRange(0, 0);
+      await dispatchTextareaKeydown(view.textarea, "ArrowUp");
+      assert.equal(view.textarea.value, "A");
+
+      view.textarea.setSelectionRange(0, 0);
+      await dispatchTextareaKeydown(view.textarea, "ArrowUp");
+      assert.equal(view.textarea.value, "A");
+
+      view.textarea.setSelectionRange(view.textarea.value.length, view.textarea.value.length);
+      await dispatchTextareaKeydown(view.textarea, "ArrowDown");
+      assert.equal(view.textarea.value, "B");
+
+      view.textarea.setSelectionRange(view.textarea.value.length, view.textarea.value.length);
+      await dispatchTextareaKeydown(view.textarea, "ArrowDown");
+      assert.equal(view.textarea.value, "C");
+
+      view.textarea.setSelectionRange(view.textarea.value.length, view.textarea.value.length);
+      await dispatchTextareaKeydown(view.textarea, "ArrowDown");
+      assert.equal(view.textarea.value, "draft đang gõ dở");
+
+      await updateTextarea(view.textarea, "C");
+      await submitComposer(view.textarea);
+      const storedHistory = JSON.parse(window.localStorage.getItem(storageKey) ?? "[]");
+      assert.deepEqual(storedHistory, ["C", "B", "A"]);
+
+      await updateTextarea(view.textarea, "line 1\nline 2");
+      view.textarea.setSelectionRange(3, 3);
+      await dispatchTextareaKeydown(view.textarea, "ArrowUp");
+      assert.equal(view.textarea.value, "line 1\nline 2");
+
+      view.textarea.setSelectionRange(view.textarea.value.length - 2, view.textarea.value.length - 2);
+      await dispatchTextareaKeydown(view.textarea, "ArrowDown");
+      assert.equal(view.textarea.value, "line 1\nline 2");
+
+      await updateTextarea(view.textarea, "");
+      view.textarea.setSelectionRange(0, 0);
+      await dispatchTextareaKeydown(view.textarea, "ArrowUp", { isComposing: true });
+      assert.equal(view.textarea.value, "");
+
+      view.textarea.setSelectionRange(0, 0);
+      await dispatchTextareaKeydown(view.textarea, "ArrowUp");
+      assert.equal(view.textarea.value, "C");
+
+      await updateTextarea(view.textarea, "C sửa");
+      assert.equal(view.textarea.value, "C sửa");
+      view.textarea.setSelectionRange(view.textarea.value.length, view.textarea.value.length);
+      await dispatchTextareaKeydown(view.textarea, "ArrowDown");
+      assert.equal(view.textarea.value, "C sửa");
+
+      view.cleanup();
+
+      const reloadedView = await renderChatShell({
+        promptHistoryStorageKey: storageKey,
+        promptHistoryLimit: 3,
+      });
+      reloadedView.textarea.setSelectionRange(0, 0);
+      await dispatchTextareaKeydown(reloadedView.textarea, "ArrowUp");
+      assert.equal(reloadedView.textarea.value, "C");
+      reloadedView.cleanup();
     }
   } finally {
     cleanupDom?.();
