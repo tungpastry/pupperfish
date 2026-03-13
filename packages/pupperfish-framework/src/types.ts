@@ -50,6 +50,7 @@ export type PupperfishImageEvidence = {
   chartLabel: string;
   symbol: string | null;
   timeframe: string | null;
+  note?: string | null;
   fileName: string;
   fileUrl: string | null;
   score: number;

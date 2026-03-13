@@ -219,6 +219,7 @@ export function PupperfishChatShell({
         chartLabel: item.chartLabel,
         symbol: item.symbol,
         timeframe: item.timeframe,
+        note: item.note,
         fileName: item.fileName,
       })),
     [activeCharts],

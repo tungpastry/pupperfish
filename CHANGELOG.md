@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Thêm `note` vào `PupperfishImageEvidence` và truyền `note` vào chart viewer metadata của `PupperfishChatShell`.
+- Sửa metadata panel của Pupperfish chart viewer để hiển thị `Note` khi chart evidence có dữ liệu này.
+
 ## 0.1.2
 
 - Thêm quick-win chart viewer/lightbox dùng chung cho `PupperfishChatShell` và `TradeImageGalleryManager`.
