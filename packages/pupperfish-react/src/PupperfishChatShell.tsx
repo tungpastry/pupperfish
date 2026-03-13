@@ -5,6 +5,7 @@ import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useState } f
 
 import type { PupperfishEvidenceItem, PupperfishPlannerMode, PupperfishRetrieveResult } from "@tungpastry/pupperfish-framework";
 
+import { PupperfishChartViewer } from "./PupperfishChartViewer.js";
 import { PupperfishDock, formatPupperfishStatusLabel, resolveConfidenceTier } from "./PupperfishDock.js";
 import { TradeImageGalleryManager } from "./TradeImageGalleryManager.js";
 import type {
@@ -162,6 +163,8 @@ export function PupperfishChatShell({
   const [uploadEntryLoading, setUploadEntryLoading] = useState(false);
   const [uploadEntryError, setUploadEntryError] = useState<string | null>(null);
   const [uploadEntryMeta, setUploadEntryMeta] = useState<Awaited<ReturnType<PupperfishClient["getLog"]>> | null>(null);
+  const [chartViewerIndex, setChartViewerIndex] = useState(0);
+  const [chartViewerOpen, setChartViewerOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -207,6 +210,19 @@ export function PupperfishChatShell({
 
   const activeEvidence = useMemo(() => activeAssistant?.evidence ?? [], [activeAssistant]);
   const activeCharts = useMemo(() => activeEvidence.filter((item) => item.kind === "image"), [activeEvidence]);
+  const activeChartViewerItems = useMemo(
+    () =>
+      activeCharts.map((item) => ({
+        id: item.id,
+        imageUid: item.imageUid,
+        fileUrl: item.fileUrl,
+        chartLabel: item.chartLabel,
+        symbol: item.symbol,
+        timeframe: item.timeframe,
+        fileName: item.fileName,
+      })),
+    [activeCharts],
+  );
   const activeRenderMeta = activeAssistant?.renderMeta ?? null;
   const activeEvidenceCount = activeRenderMeta?.evidenceCount ?? 0;
   const activeChartsCount = activeRenderMeta?.chartsCount ?? 0;
@@ -241,6 +257,11 @@ export function PupperfishChatShell({
       mode,
     });
   }, [signalStore, status, activeConfidence, activeLowEvidence, activeEvidenceCount, activeChartsCount, error, mode]);
+
+  useEffect(() => {
+    setChartViewerOpen(false);
+    setChartViewerIndex(0);
+  }, [activeAssistant?.id]);
 
   const setActiveTab = useCallback((tab: PupperfishEvidenceTab) => {
     setActiveSelection((previous) => ({
@@ -745,14 +766,24 @@ export function PupperfishChatShell({
               ) : activeCharts.length < 1 ? (
                 <p className="zen-muted">Message này chưa có charts trong evidence.</p>
               ) : (
-                activeCharts.map((item) => (
+                activeCharts.map((item, index) => (
                   <article key={`chart-${activeAssistant.id}-${item.id}`} className="zen-pf-evidence-item">
                     <p className="zen-pf-evidence-item__head">
                       <strong>{item.chartLabel}</strong>
                       <span>{(item.score * 100).toFixed(0)}%</span>
                     </p>
                     {item.fileUrl ? (
-                      <img src={item.fileUrl} alt={item.chartLabel} className="zen-pf-chart-preview" loading="lazy" />
+                      <button
+                        type="button"
+                        className="zen-pf-chart-preview-button"
+                        onClick={() => {
+                          setChartViewerIndex(index);
+                          setChartViewerOpen(true);
+                        }}
+                        aria-label={`Mở chart ${item.chartLabel}`}
+                      >
+                        <img src={item.fileUrl} alt={item.chartLabel} className="zen-pf-chart-preview" loading="lazy" />
+                      </button>
                     ) : (
                       <p className="zen-muted">Không có URL ảnh.</p>
                     )}
@@ -843,6 +874,14 @@ export function PupperfishChatShell({
           ) : null}
         </aside>
       </section>
+
+      <PupperfishChartViewer
+        items={activeChartViewerItems}
+        activeIndex={chartViewerIndex}
+        open={chartViewerOpen}
+        onClose={() => setChartViewerOpen(false)}
+        onActiveIndexChange={setChartViewerIndex}
+      />
     </main>
   );
 }

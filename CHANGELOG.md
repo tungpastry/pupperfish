@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+- Thêm quick-win chart viewer/lightbox dùng chung cho `PupperfishChatShell` và `TradeImageGalleryManager`.
+- Hỗ trợ xem chart lớn với `prev/next`, `zoom in/out/reset`, `fullscreen`, metadata đọc-only, và keyboard close/navigation.
+
 ## 0.1.1
 
 - `PupperfishChatShell` hỗ trợ `Enter` để submit và `Shift+Enter` để xuống dòng.

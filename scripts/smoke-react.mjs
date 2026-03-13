@@ -6,20 +6,38 @@ import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 
 import {
+  PupperfishChartViewer,
   PupperfishChatShell,
   PupperfishDock,
   TradeImageGalleryManager,
   shouldSubmitComposerKey,
 } from "../packages/pupperfish-react/dist/index.js";
 
-const { JSDOM } = await import(process.env.PUPPERFISH_JSDOM_ENTRY ?? "jsdom");
+let JSDOM = null;
+try {
+  ({ JSDOM } = await import(process.env.PUPPERFISH_JSDOM_ENTRY ?? "jsdom"));
+} catch {
+  JSDOM = null;
+}
 
 function installDom() {
+  if (!JSDOM) {
+    throw new Error("jsdom is not available");
+  }
+
   const dom = new JSDOM("<!doctype html><html><body></body></html>", {
     url: "http://localhost",
   });
 
   const { window } = dom;
+  if (!Object.getOwnPropertyDescriptor(window.Document.prototype, "fullscreenElement")) {
+    Object.defineProperty(window.Document.prototype, "fullscreenElement", {
+      configurable: true,
+      get() {
+        return null;
+      },
+    });
+  }
   window.matchMedia = window.matchMedia ?? (() => ({
     matches: false,
     media: "",
@@ -48,10 +66,12 @@ function installDom() {
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    HTMLButtonElement: window.HTMLButtonElement,
     HTMLTextAreaElement: window.HTMLTextAreaElement,
     HTMLFormElement: window.HTMLFormElement,
     Event: window.Event,
     KeyboardEvent: window.KeyboardEvent,
+    PointerEvent: window.PointerEvent ?? window.MouseEvent,
   })) {
     const existing = Object.getOwnPropertyDescriptor(globalThis, key);
     restore.push([key, existing]);
@@ -145,6 +165,34 @@ async function renderChatShell(options = {}) {
   };
 }
 
+async function renderGallery(options = {}) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const client = createClient(options.clientOverrides);
+
+  await act(async () => {
+    root.render(
+      React.createElement(TradeImageGalleryManager, {
+        client,
+        entryUid: options.entryUid ?? "entry_smoke",
+        title: "Charts",
+      }),
+    );
+  });
+
+  return {
+    root,
+    container,
+    cleanup() {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    },
+  };
+}
+
 function createKeydown(key, options = {}) {
   const event = new window.KeyboardEvent("keydown", {
     key,
@@ -167,6 +215,10 @@ function createKeydown(key, options = {}) {
 }
 
 async function runComposerKeyboardTests() {
+  if (!JSDOM) {
+    return;
+  }
+
   let cleanupDom = null;
 
   try {
@@ -301,6 +353,150 @@ async function runComposerKeyboardTests() {
   }
 }
 
+async function runChartViewerTests() {
+  if (!JSDOM) {
+    return;
+  }
+
+  let cleanupDom = null;
+
+  try {
+    cleanupDom = installDom();
+
+    {
+      const viewerHtml = renderToString(
+        React.createElement(PupperfishChartViewer, {
+          items: [
+            {
+              id: "img_1",
+              imageUid: "img_1",
+              fileUrl: "http://localhost/chart.png",
+              chartLabel: "UJ H1 setup",
+              symbol: "USDJPY",
+              timeframe: "H1",
+              note: "Alert zone",
+              imageSlot: 1,
+              fileName: "chart.png",
+              createdAt: "2026-03-13T10:00:00.000Z",
+            },
+          ],
+          activeIndex: 0,
+          open: true,
+          onClose() {},
+          onActiveIndexChange() {},
+        }),
+      );
+      assert.ok(viewerHtml.includes("UJ H1 setup"));
+      assert.ok(viewerHtml.includes("Chart Metadata"));
+    }
+
+    {
+      const view = await renderChatShell({
+        clientOverrides: {
+          async retrieve() {
+            return {
+              requestUid: "req_chart",
+              convoUid: "convo_chart",
+              mode: "hybrid",
+              answer: "Có chart",
+              confidence: 0.8,
+              assumptions: [],
+              evidence: [
+                {
+                  kind: "image",
+                  id: "evi_img_1",
+                  imageUid: "img_1",
+                  entryUid: "entry_1",
+                  chartLabel: "UJ H1 setup",
+                  symbol: "USDJPY",
+                  timeframe: "H1",
+                  fileName: "chart.png",
+                  fileUrl: "http://localhost/chart.png",
+                  score: 0.91,
+                },
+              ],
+              charts: [],
+              memories: [],
+              sources: [{ kind: "image", uid: "img_1" }],
+              latencyMs: 5,
+            };
+          },
+        },
+      });
+
+      await act(async () => {
+        view.textarea.value = "show chart";
+        view.textarea.dispatchEvent(new window.Event("input", { bubbles: true }));
+      });
+
+      await act(async () => {
+        view.textarea.form.requestSubmit();
+      });
+
+      const previewButton = view.container.querySelector(".zen-pf-chart-preview-button");
+      assert.ok(previewButton instanceof window.HTMLButtonElement);
+
+      await act(async () => {
+        previewButton.click();
+      });
+
+      assert.ok(view.container.querySelector(".zen-pf-chart-viewer"));
+
+      await act(async () => {
+        window.dispatchEvent(createKeydown("Escape"));
+      });
+
+      assert.equal(view.container.querySelector(".zen-pf-chart-viewer"), null);
+      view.cleanup();
+    }
+
+    {
+      const view = await renderGallery({
+        clientOverrides: {
+          async listLogImages() {
+            return [
+              {
+                id: "db_img_1",
+                imageUid: "img_1",
+                entryUid: "entry_smoke",
+                imageSlot: 1,
+                chartLabel: "XAUUSD M30",
+                symbol: "XAUUSD",
+                timeframe: "M30",
+                note: "Watch SMA20",
+                fileName: "xauusd.png",
+                fileUrl: "http://localhost/xauusd.png",
+                mimeType: "image/png",
+                fileSizeBytes: "1024",
+                widthPx: 1280,
+                heightPx: 720,
+                createdAt: "2026-03-13T10:00:00.000Z",
+                updatedAt: "2026-03-13T10:00:00.000Z",
+              },
+            ];
+          },
+        },
+      });
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const previewButton = view.container.querySelector(".zen-image-card__preview-button");
+      assert.ok(previewButton instanceof window.HTMLButtonElement);
+
+      await act(async () => {
+        previewButton.click();
+      });
+
+      assert.ok(view.container.querySelector(".zen-pf-chart-viewer"));
+      view.cleanup();
+    }
+  } finally {
+    cleanupDom?.();
+  }
+}
+
 const dockHtml = renderToString(
   React.createElement(PupperfishDock, {
     status: "idle",
@@ -320,5 +516,34 @@ const galleryHtml = renderToString(
 );
 assert.ok(galleryHtml.includes("Charts"));
 
+const viewerHtml = renderToString(
+  React.createElement(PupperfishChartViewer, {
+    items: [
+      {
+        id: "img_static",
+        imageUid: "img_static",
+        fileUrl: "http://localhost/chart.png",
+        chartLabel: "Static viewer",
+        symbol: "USDJPY",
+        timeframe: "H1",
+        note: "Smoke chart",
+        imageSlot: 1,
+        fileName: "chart.png",
+        createdAt: "2026-03-13T10:00:00.000Z",
+      },
+    ],
+    activeIndex: 0,
+    open: true,
+    onClose() {},
+    onActiveIndexChange() {},
+  }),
+);
+assert.ok(viewerHtml.includes("Chart Metadata"));
+assert.ok(viewerHtml.includes("Static viewer"));
+
 await runComposerKeyboardTests();
+await runChartViewerTests();
+if (!JSDOM) {
+  console.log("react smoke: jsdom unavailable, DOM interaction tests skipped");
+}
 console.log("react smoke ok");

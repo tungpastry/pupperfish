@@ -11,6 +11,19 @@ export type PupperfishUiStatus = "idle" | "listening" | "thinking" | "answering"
 export type PupperfishEvidenceTab = "evidence" | "charts" | "uploads" | "saved";
 export type PupperfishComposerSubmitMode = "enter-to-submit" | "meta-enter-to-submit";
 
+export type PupperfishChartViewerItem = {
+  id: string;
+  imageUid?: string | null;
+  fileUrl: string | null;
+  chartLabel: string;
+  symbol?: string | null;
+  timeframe?: string | null;
+  note?: string | null;
+  imageSlot?: number | null;
+  fileName?: string | null;
+  createdAt?: string | null;
+};
+
 export type AssistantRenderMeta = {
   confidence: number | null;
   assumptions: string[];

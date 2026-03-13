@@ -4,6 +4,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { PupperfishTradeImageItem, PupperfishUpdateTradeImagePayload } from "@tungpastry/pupperfish-framework";
 
+import { PupperfishChartViewer } from "./PupperfishChartViewer.js";
 import type { PupperfishClient } from "./types.js";
 
 type TradeImageGalleryManagerProps = {
@@ -144,6 +145,8 @@ export function TradeImageGalleryManager({
   const [deletingUid, setDeletingUid] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [highlightedImageUid, setHighlightedImageUid] = useState<string | null>(null);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const manualReloadRequestedRef = useRef(false);
   const imageCardRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -160,6 +163,8 @@ export function TradeImageGalleryManager({
     setMetadataNotice(null);
     setDeleteNotice(null);
     setHighlightedImageUid(null);
+    setViewerOpen(false);
+    setViewerIndex(0);
   }, [entryValue]);
 
   useEffect(() => {
@@ -506,6 +511,22 @@ export function TradeImageGalleryManager({
   const showGlobalDeleteNotice = Boolean(
     deleteNotice && (deleteNotice.tone === "success" || !images.some((item) => item.imageUid === deleteNotice.imageUid)),
   );
+  const viewerItems = useMemo(
+    () =>
+      images.map((image) => ({
+        id: image.id,
+        imageUid: image.imageUid,
+        fileUrl: imageUrlFor(image),
+        chartLabel: image.chartLabel,
+        symbol: image.symbol,
+        timeframe: image.timeframe,
+        note: image.note,
+        imageSlot: image.imageSlot,
+        fileName: image.fileName,
+        createdAt: image.createdAt,
+      })),
+    [images],
+  );
 
   return (
     <section className={`zen-image-manager${compact ? " zen-image-manager--compact" : ""}`}>
@@ -657,7 +678,7 @@ export function TradeImageGalleryManager({
         <div className="zen-image-gallery" aria-label="Danh sách chart images">
           {images.length < 1 && !loading ? <p className="zen-muted">Chưa có chart cho log này.</p> : null}
 
-          {images.map((image) => {
+          {images.map((image, index) => {
             const isEditing = editing?.imageUid === image.imageUid;
             const metadataNoticeForImage = metadataNotice?.imageUid === image.imageUid ? metadataNotice : null;
             const deleteNoticeForImage =
@@ -672,7 +693,21 @@ export function TradeImageGalleryManager({
                 }}
               >
                 <div className="zen-image-card__preview-wrap">
-                  <img src={imageUrlFor(image)} alt={image.chartLabel} className="zen-image-card__preview" loading="lazy" />
+                  <button
+                    type="button"
+                    className="zen-image-card__preview-button"
+                    onClick={() => {
+                      if (!imageUrlFor(image)) {
+                        return;
+                      }
+                      setViewerIndex(index);
+                      setViewerOpen(true);
+                    }}
+                    aria-label={`Mở chart ${image.chartLabel}`}
+                    disabled={!imageUrlFor(image)}
+                  >
+                    <img src={imageUrlFor(image)} alt={image.chartLabel} className="zen-image-card__preview" loading="lazy" />
+                  </button>
                 </div>
 
                 <div className="zen-image-card__meta">
@@ -796,6 +831,14 @@ export function TradeImageGalleryManager({
           })}
         </div>
       ) : null}
+
+      <PupperfishChartViewer
+        items={viewerItems}
+        activeIndex={viewerIndex}
+        open={viewerOpen}
+        onClose={() => setViewerOpen(false)}
+        onActiveIndexChange={setViewerIndex}
+      />
     </section>
   );
 }

@@ -297,6 +297,20 @@
   background: var(--output-next-bg);
 }
 
+.zen-image-card__preview-button,
+.zen-pf-chart-preview-button {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.zen-image-card__preview-button:disabled {
+  cursor: not-allowed;
+}
+
 .zen-image-card__preview {
   display: block;
   width: 100%;
@@ -861,6 +875,153 @@
   border: 1px solid rgba(97, 128, 165, 0.5);
 }
 
+.zen-pf-chart-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(1, 7, 19, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.zen-pf-chart-viewer__dialog {
+  width: min(1160px, 100%);
+  max-height: calc(100dvh - 2rem);
+  border: 1px solid rgba(103, 135, 171, 0.42);
+  border-radius: 16px;
+  background: rgba(7, 16, 31, 0.96);
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.5);
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.85rem;
+}
+
+.zen-pf-chart-viewer__toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.zen-pf-chart-viewer__title {
+  display: grid;
+  gap: 0.15rem;
+  color: #dbeafe;
+  font-size: 0.84rem;
+}
+
+.zen-pf-chart-viewer__title span {
+  color: #8fb0d8;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.zen-pf-chart-viewer__toolbar-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.zen-pf-chart-viewer__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.6fr);
+  gap: 0.75rem;
+  min-height: min(68vh, 760px);
+}
+
+.zen-pf-chart-viewer__stage-shell {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 0.55rem;
+}
+
+.zen-pf-chart-viewer__stage {
+  position: relative;
+  min-height: 0;
+  border-radius: 14px;
+  border: 1px solid rgba(95, 130, 170, 0.34);
+  background: linear-gradient(135deg, rgba(11, 23, 42, 0.94) 0%, rgba(16, 31, 57, 0.98) 100%);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  cursor: default;
+}
+
+.zen-pf-chart-viewer__stage.is-zoomed {
+  cursor: grab;
+}
+
+.zen-pf-chart-viewer__stage.is-dragging {
+  cursor: grabbing;
+}
+
+.zen-pf-chart-viewer__image {
+  max-width: 100%;
+  max-height: min(68vh, 760px);
+  object-fit: contain;
+  transform-origin: center center;
+  transition: transform 140ms ease;
+  user-select: none;
+  pointer-events: none;
+}
+
+.zen-pf-chart-viewer__nav {
+  align-self: center;
+  width: 42px;
+  min-height: 42px;
+  border-radius: 999px;
+  border: 1px solid rgba(108, 140, 176, 0.42);
+  background: rgba(9, 21, 39, 0.92);
+  color: #e2ebf9;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.zen-pf-chart-viewer__meta {
+  border-radius: 14px;
+  border: 1px solid rgba(94, 126, 160, 0.32);
+  background: rgba(9, 19, 36, 0.86);
+  padding: 0.8rem;
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+}
+
+.zen-pf-chart-viewer__meta-list {
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.zen-pf-chart-viewer__meta-row {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.zen-pf-chart-viewer__meta-row dt {
+  color: #8fa8ca;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.zen-pf-chart-viewer__meta-row dd {
+  margin: 0;
+  color: #edf4ff;
+  font-size: 0.84rem;
+  word-break: break-word;
+}
+
 .zen-pupperfish-rail--closed {
   display: none;
 }
@@ -940,6 +1101,45 @@
   .zen-pf-chat-head__dock {
     min-width: 0;
     width: 100%;
+  }
+
+  .zen-pf-chart-viewer {
+    padding: 0;
+  }
+
+  .zen-pf-chart-viewer__dialog {
+    width: 100%;
+    max-height: 100dvh;
+    min-height: 100dvh;
+    border-radius: 0;
+    padding: 0.75rem;
+  }
+
+  .zen-pf-chart-viewer__body {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .zen-pf-chart-viewer__stage-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .zen-pf-chart-viewer__nav {
+    position: absolute;
+    top: 0.75rem;
+    z-index: 2;
+  }
+
+  .zen-pf-chart-viewer__nav--prev {
+    left: 0.75rem;
+  }
+
+  .zen-pf-chart-viewer__nav--next {
+    right: 0.75rem;
+  }
+
+  .zen-pf-chart-viewer__toolbar-actions .zen-icon-btn {
+    flex: 1 1 120px;
   }
 }
 
