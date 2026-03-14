@@ -118,6 +118,9 @@ function createClient(overrides = {}) {
     async listLogImages() {
       return [];
     },
+    async listRecentChartNotes() {
+      return [];
+    },
     async uploadLogImage() {
       throw new Error("unused");
     },
@@ -294,6 +297,13 @@ async function updateTextarea(textarea, nextValue) {
   await act(async () => {
     textarea.value = nextValue;
     textarea.dispatchEvent(new window.Event("input", { bubbles: true }));
+  });
+}
+
+async function updateInput(input, nextValue) {
+  await act(async () => {
+    input.value = nextValue;
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
 }
 
@@ -670,6 +680,57 @@ async function runChartViewerTests() {
       });
 
       assert.ok(view.container.querySelector(".zen-pf-chart-viewer"));
+      view.cleanup();
+    }
+
+    {
+      const view = await renderGallery({
+        clientOverrides: {
+          async listRecentChartNotes() {
+            return ["Executed Descending Pullback Short at H1 band."];
+          },
+        },
+      });
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const symbolInput = view.container.querySelector("#chart-upload-symbol-entry_smoke");
+      const timeframeInput = view.container.querySelector("#chart-upload-timeframe-entry_smoke");
+      const roleInput = view.container.querySelector("#chart-upload-role-entry_smoke");
+      const labelInput = view.container.querySelector("#chart-upload-label-entry_smoke");
+      const noteInput = view.container.querySelector("#chart-upload-note-entry_smoke");
+
+      assert.ok(symbolInput instanceof window.HTMLInputElement);
+      assert.ok(timeframeInput instanceof window.HTMLInputElement);
+      assert.ok(roleInput instanceof window.HTMLInputElement);
+      assert.ok(labelInput instanceof window.HTMLInputElement);
+      assert.ok(noteInput instanceof window.HTMLTextAreaElement);
+
+      await updateInput(symbolInput, "eurusd");
+      await updateInput(timeframeInput, "h1");
+      assert.equal(labelInput.value, "EURUSD H1 SETUP");
+
+      await updateInput(roleInput, "entry");
+      assert.equal(labelInput.value, "EURUSD H1 ENTRY");
+
+      await updateInput(labelInput, "Custom Label");
+      await updateInput(timeframeInput, "m30");
+      assert.equal(labelInput.value, "Custom Label");
+
+      const resetButton = [...view.container.querySelectorAll("button")].find((button) =>
+        button.textContent?.includes("Use standard label"),
+      );
+      assert.ok(resetButton instanceof window.HTMLButtonElement);
+
+      await act(async () => {
+        resetButton.click();
+      });
+      assert.equal(labelInput.value, "EURUSD M30 ENTRY");
+
+      await updateTextarea(noteInput, "desc");
+      assert.ok(view.container.textContent.includes("Executed Descending Pullback Short at H1 band."));
       view.cleanup();
     }
   } finally {

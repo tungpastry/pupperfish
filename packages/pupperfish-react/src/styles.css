@@ -78,6 +78,10 @@
   border-color: var(--accent);
 }
 
+.zen-chip--ghost {
+  background: transparent;
+}
+
 .zen-input,
 .zen-select {
   width: 100%;
@@ -166,6 +170,85 @@
   font-size: 0.73rem;
   color: var(--text-faint);
   font-weight: 700;
+}
+
+.zen-image-field-wrap {
+  position: relative;
+}
+
+.zen-image-field-wrap--textarea .zen-image-autocomplete {
+  top: calc(100% + 6px);
+}
+
+.zen-image-label-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.zen-image-form-note {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.zen-image-form-note--warning {
+  color: var(--badge-error-text);
+}
+
+.zen-image-autocomplete {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: var(--panel-bg);
+  box-shadow: 0 16px 34px rgba(10, 22, 44, 0.14);
+  overflow: hidden;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.zen-image-autocomplete__group {
+  padding: 0.38rem 0.7rem 0.2rem;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--chip-bg) 70%, transparent);
+}
+
+.zen-image-autocomplete__item {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-main);
+  text-align: left;
+  padding: 0.58rem 0.72rem;
+  display: grid;
+  gap: 0.16rem;
+  cursor: pointer;
+}
+
+.zen-image-autocomplete__item:hover,
+.zen-image-autocomplete__item--active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.zen-image-autocomplete__value {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.zen-image-autocomplete__summary {
+  font-size: 0.7rem;
+  color: var(--text-faint);
 }
 
 .zen-image-manager {

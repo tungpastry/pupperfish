@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.7
+
+- Thêm auto complete chart form cho `TradeImageGalleryManager` với combobox `Symbol/Timeframe/Role`, chart label auto-fill có thể reset về chuẩn, và note suggestions từ recent notes + template library.
+- Thêm method client `listRecentChartNotes()` và ZenLog endpoint additive để chart form lấy recent note suggestions toàn cục.
+
 ## 0.1.6
 
 - Thêm `Log Time` vào metadata panel của `PupperfishChartViewer`, dùng `dateText/timeText` của log thay vì thời điểm upload ảnh.

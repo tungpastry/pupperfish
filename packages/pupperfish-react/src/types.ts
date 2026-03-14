@@ -89,6 +89,7 @@ export interface PupperfishClient {
   retrieve(input: PupperfishRetrieveRequest): Promise<PupperfishRetrieveResult>;
   getLog(entryUid: string): Promise<PupperfishLogDetail>;
   listLogImages(entryUid: string): Promise<PupperfishTradeImageItem[]>;
+  listRecentChartNotes(limit?: number): Promise<string[]>;
   uploadLogImage(entryUid: string, payload: UploadTradeImagePayload): Promise<PupperfishTradeImageItem>;
   updateImage(imageUid: string, payload: PupperfishUpdateTradeImagePayload): Promise<PupperfishTradeImageItem>;
   deleteImage(imageUid: string): Promise<{ imageUid: string; deleted: boolean }>;
