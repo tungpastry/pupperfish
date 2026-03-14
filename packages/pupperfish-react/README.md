@@ -13,6 +13,7 @@ It includes:
 - `createLocalStoragePupperfishUiSignalStore(...)`
 
 The package is UI-only. Your host app must provide a working `PupperfishClient`.
+`TradeImageGalleryManager` is intentionally generic. Host-specific form UX, dictionaries, and note suggestion logic should live in the host app, not in this package.
 
 ## Composer behavior
 - mặc định: `Enter` để submit
@@ -46,6 +47,24 @@ Your `PupperfishClient` must implement:
 - `uploadLogImage`
 - `updateImage`
 - `deleteImage`
+
+## Host-specific upload UIs
+If your product needs a domain-specific chart/image manager, inject it into the shell instead of forking the package:
+
+```tsx
+<PupperfishChatShell
+  client={client}
+  branding={{ assistantName: "Pupperfish" }}
+  renderTradeImageManager={({ client, entryUid, title, compact }) => (
+    <MyHostTradeImageManager
+      client={client}
+      entryUid={entryUid}
+      title={title}
+      compact={compact}
+    />
+  )}
+/>
+```
 
 ## Styling
 Do not forget to import the package stylesheet:

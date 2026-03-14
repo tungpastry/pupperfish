@@ -163,6 +163,7 @@ Props:
 - `client`
 - `branding`
 - optional `signalStore`
+- optional `renderTradeImageManager`
 
 Use it when you want a full-page assistant view with:
 - query form
@@ -170,6 +171,8 @@ Use it when you want a full-page assistant view with:
 - answer stream/history
 - evidence rail
 - chart/image workflows
+
+`renderTradeImageManager` lets a host app replace the default generic gallery manager with a product-specific upload/edit experience while keeping the rest of the shell intact.
 
 ### `PupperfishWidgetShell`
 Props:
@@ -197,6 +200,7 @@ Props:
 - optional `compact`
 
 Use it when you want chart-image upload/edit/delete for a specific log entry.
+This manager is intentionally generic. Host apps should inject domain-specific chart form UX through `PupperfishChatShell.renderTradeImageManager(...)` instead of extending the public package client contract.
 
 ## Styling
 The React package ships CSS separately.

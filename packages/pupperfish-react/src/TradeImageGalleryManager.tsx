@@ -1,34 +1,10 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import {
-  ChangeEvent,
-  FormEvent,
-  KeyboardEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { PupperfishTradeImageItem, PupperfishUpdateTradeImagePayload } from "@tungpastry/pupperfish-framework";
 
 import { PupperfishChartViewer } from "./PupperfishChartViewer.js";
-import {
-  buildChartComboboxSuggestions,
-  buildChartFieldWarning,
-  buildNoteSuggestions,
-  CHART_ROLES,
-  extractRoleFromChartLabel,
-  generateChartLabel,
-  groupLabelForSuggestion,
-  isCanonicalChartLabel,
-  normalizeChartRoleInput,
-  normalizeChartSymbol,
-  normalizeChartTimeframe,
-  type ChartRole,
-  type ChartSuggestionItem,
-} from "./chartFormAutocomplete.js";
 import type { PupperfishClient } from "./types.js";
 
 type TradeImageGalleryManagerProps = {
@@ -38,21 +14,20 @@ type TradeImageGalleryManagerProps = {
   compact?: boolean;
 };
 
-type ChartDraftBase = {
+type UploadDraft = {
+  file: File | null;
   chartLabel: string;
   symbol: string;
   timeframe: string;
-  role: string;
   note: string;
-  chartLabelManuallyEdited: boolean;
 };
 
-type UploadDraft = ChartDraftBase & {
-  file: File | null;
-};
-
-type MetadataDraft = ChartDraftBase & {
+type MetadataDraft = {
   imageUid: string;
+  chartLabel: string;
+  symbol: string;
+  timeframe: string;
+  note: string;
   imageSlot: string;
 };
 
@@ -70,43 +45,16 @@ type ScopedNotice = InlineNotice & {
   imageUid: string;
 };
 
-type ChartDraftField = "symbol" | "timeframe" | "role" | "chartLabel" | "note";
-type AutocompleteTarget =
-  | "upload-symbol"
-  | "upload-timeframe"
-  | "upload-role"
-  | "upload-note"
-  | "edit-symbol"
-  | "edit-timeframe"
-  | "edit-role"
-  | "edit-note";
-
-type FocusSurface = "upload" | "edit";
-
-type RenderFieldArgs = {
-  surface: FocusSurface;
-  field: "symbol" | "timeframe" | "role";
-  id: string;
-  label: string;
-  value: string;
-  placeholder: string;
-  disabled: boolean;
-};
-
-const DEFAULT_ROLE: ChartRole = CHART_ROLES[0];
 const DEFAULT_UPLOAD_DRAFT: UploadDraft = {
   file: null,
   chartLabel: "",
   symbol: "",
   timeframe: "",
-  role: DEFAULT_ROLE,
   note: "",
-  chartLabelManuallyEdited: false,
 };
 
 const MAX_IMAGE_FILE_BYTES = 10 * 1024 * 1024;
 const UPLOAD_SUCCESS_TIMEOUT_MS = 4500;
-const RECENT_NOTES_LIMIT = 20;
 
 function normalizeRequestFailureMessage(cause: unknown, fallback: string): string {
   if (!(cause instanceof Error)) {
@@ -143,66 +91,14 @@ function imageUrlFor(item: PupperfishTradeImageItem): string {
   return item.fileUrl ?? "";
 }
 
-function buildDraftChartLabel(symbol: string, timeframe: string, role: string): string {
-  return generateChartLabel(symbol, timeframe, role);
-}
-
-function updateChartDraft<T extends ChartDraftBase>(draft: T, field: ChartDraftField, nextValue: string): T {
-  if (field === "chartLabel") {
-    const standardLabel = buildDraftChartLabel(draft.symbol, draft.timeframe, draft.role);
-    return {
-      ...draft,
-      chartLabel: nextValue,
-      chartLabelManuallyEdited: nextValue !== standardLabel,
-    };
-  }
-
-  if (field === "note") {
-    return {
-      ...draft,
-      note: nextValue,
-    };
-  }
-
-  const nextDraft = {
-    ...draft,
-    symbol: field === "symbol" ? normalizeChartSymbol(nextValue) : draft.symbol,
-    timeframe: field === "timeframe" ? normalizeChartTimeframe(nextValue) : draft.timeframe,
-    role: field === "role" ? normalizeChartRoleInput(nextValue) : draft.role,
-  };
-
-  if (nextDraft.chartLabelManuallyEdited) {
-    return nextDraft;
-  }
-
-  return {
-    ...nextDraft,
-    chartLabel: buildDraftChartLabel(nextDraft.symbol, nextDraft.timeframe, nextDraft.role),
-  };
-}
-
-function resetChartDraftLabel<T extends ChartDraftBase>(draft: T): T {
-  return {
-    ...draft,
-    chartLabel: buildDraftChartLabel(draft.symbol, draft.timeframe, draft.role),
-    chartLabelManuallyEdited: false,
-  };
-}
-
 function createMetadataDraft(item: PupperfishTradeImageItem): MetadataDraft {
-  const symbol = item.symbol ?? "";
-  const timeframe = item.timeframe ?? "";
-  const role = extractRoleFromChartLabel(item.chartLabel) ?? DEFAULT_ROLE;
-
   return {
     imageUid: item.imageUid,
     chartLabel: item.chartLabel,
-    symbol,
-    timeframe,
-    role,
+    symbol: item.symbol ?? "",
+    timeframe: item.timeframe ?? "",
     note: item.note ?? "",
     imageSlot: String(item.imageSlot),
-    chartLabelManuallyEdited: !isCanonicalChartLabel(item.chartLabel, symbol, timeframe, role),
   };
 }
 
@@ -230,40 +126,6 @@ function statusLabelFor(variant: StatusVariant): string {
   return "Đang xử lý";
 }
 
-function fieldForTarget(target: AutocompleteTarget): ChartDraftField {
-  if (target.endsWith("symbol")) {
-    return "symbol";
-  }
-  if (target.endsWith("timeframe")) {
-    return "timeframe";
-  }
-  if (target.endsWith("role")) {
-    return "role";
-  }
-  return "note";
-}
-
-function surfaceForTarget(target: AutocompleteTarget): FocusSurface {
-  return target.startsWith("upload") ? "upload" : "edit";
-}
-
-function helperTextForDraft(draft: ChartDraftBase): string {
-  return draft.chartLabelManuallyEdited ? "Custom label" : "Generated from Symbol + Timeframe + Role";
-}
-
-function descriptionForSuggestion(item: ChartSuggestionItem): string | null {
-  if (item.group === "symbols") {
-    return "Symbol chuẩn";
-  }
-  if (item.group === "timeframes") {
-    return "Timeframe chuẩn";
-  }
-  if (item.group === "roles") {
-    return "Role chuẩn";
-  }
-  return item.summary ?? null;
-}
-
 export function TradeImageGalleryManager({
   client,
   entryUid,
@@ -272,7 +134,6 @@ export function TradeImageGalleryManager({
 }: TradeImageGalleryManagerProps) {
   const [images, setImages] = useState<PupperfishTradeImageItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [recentNotes, setRecentNotes] = useState<string[]>([]);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>("idle");
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [galleryNotice, setGalleryNotice] = useState<InlineNotice | null>(null);
@@ -286,36 +147,12 @@ export function TradeImageGalleryManager({
   const [highlightedImageUid, setHighlightedImageUid] = useState<string | null>(null);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [activeAutocompleteTarget, setActiveAutocompleteTarget] = useState<AutocompleteTarget | null>(null);
-  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const uploadSymbolRef = useRef<HTMLInputElement>(null);
-  const uploadTimeframeRef = useRef<HTMLInputElement>(null);
-  const uploadRoleRef = useRef<HTMLInputElement>(null);
-  const uploadChartLabelRef = useRef<HTMLInputElement>(null);
-  const uploadNoteRef = useRef<HTMLTextAreaElement>(null);
-  const uploadSubmitRef = useRef<HTMLButtonElement>(null);
-  const editSymbolRef = useRef<HTMLInputElement>(null);
-  const editTimeframeRef = useRef<HTMLInputElement>(null);
-  const editRoleRef = useRef<HTMLInputElement>(null);
-  const editChartLabelRef = useRef<HTMLInputElement>(null);
-  const editImageSlotRef = useRef<HTMLInputElement>(null);
-  const editNoteRef = useRef<HTMLTextAreaElement>(null);
-  const editSubmitRef = useRef<HTMLButtonElement>(null);
   const manualReloadRequestedRef = useRef(false);
   const imageCardRefs = useRef<Record<string, HTMLElement | null>>({});
 
   const canLoad = Boolean(entryUid && entryUid.trim());
   const entryValue = (entryUid ?? "").trim();
-
-  const loadRecentNotes = useCallback(async () => {
-    try {
-      const nextNotes = await client.listRecentChartNotes(RECENT_NOTES_LIMIT);
-      setRecentNotes(nextNotes);
-    } catch {
-      setRecentNotes([]);
-    }
-  }, [client]);
 
   useEffect(() => {
     setEditing(null);
@@ -328,18 +165,7 @@ export function TradeImageGalleryManager({
     setHighlightedImageUid(null);
     setViewerOpen(false);
     setViewerIndex(0);
-    setActiveAutocompleteTarget(null);
-    setActiveSuggestionIndex(0);
   }, [entryValue]);
-
-  useEffect(() => {
-    if (!canLoad) {
-      setRecentNotes([]);
-      return;
-    }
-
-    void loadRecentNotes();
-  }, [canLoad, loadRecentNotes]);
 
   useEffect(() => {
     if (uploadStatus !== "success" || !uploadMessage) {
@@ -468,190 +294,14 @@ export function TradeImageGalleryManager({
     };
   }, [canLoad, client, entryValue, reloadNonce]);
 
-  const activeSuggestions = useMemo(() => {
-    if (!activeAutocompleteTarget) {
-      return [];
-    }
-
-    switch (activeAutocompleteTarget) {
-      case "upload-symbol":
-        return buildChartComboboxSuggestions("symbol", uploadDraft.symbol);
-      case "upload-timeframe":
-        return buildChartComboboxSuggestions("timeframe", uploadDraft.timeframe);
-      case "upload-role":
-        return buildChartComboboxSuggestions("role", uploadDraft.role);
-      case "upload-note":
-        return buildNoteSuggestions(uploadDraft.note, recentNotes);
-      case "edit-symbol":
-        return editing ? buildChartComboboxSuggestions("symbol", editing.symbol) : [];
-      case "edit-timeframe":
-        return editing ? buildChartComboboxSuggestions("timeframe", editing.timeframe) : [];
-      case "edit-role":
-        return editing ? buildChartComboboxSuggestions("role", editing.role) : [];
-      case "edit-note":
-        return editing ? buildNoteSuggestions(editing.note, recentNotes) : [];
-      default:
-        return [];
-    }
-  }, [activeAutocompleteTarget, editing, recentNotes, uploadDraft.note, uploadDraft.role, uploadDraft.symbol, uploadDraft.timeframe]);
-
-  useEffect(() => {
-    if (activeSuggestions.length < 1) {
-      setActiveSuggestionIndex(0);
-      return;
-    }
-
-    setActiveSuggestionIndex((previous) => Math.min(previous, activeSuggestions.length - 1));
-  }, [activeSuggestions]);
-
-  const uploadWarning = buildChartFieldWarning(uploadDraft.symbol, uploadDraft.timeframe, uploadDraft.role);
-  const editWarning = editing ? buildChartFieldWarning(editing.symbol, editing.timeframe, editing.role) : null;
-
   const updateUploadField = <K extends keyof UploadDraft>(field: K, value: UploadDraft[K]) => {
-    setUploadDraft((previous) => {
-      if (field === "file") {
-        return {
-          ...previous,
-          file: value as UploadDraft["file"],
-        };
-      }
-
-      return updateChartDraft(previous, field as ChartDraftField, value as string);
-    });
+    setUploadDraft((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
     setUploadStatus("idle");
     setUploadMessage(null);
   };
-
-  const updateEditingField = <K extends keyof MetadataDraft>(field: K, value: MetadataDraft[K]) => {
-    setEditing((previous) => {
-      if (!previous) {
-        return previous;
-      }
-
-      if (field === "imageUid" || field === "imageSlot") {
-        return {
-          ...previous,
-          [field]: value,
-        };
-      }
-
-      return updateChartDraft(previous, field as ChartDraftField, value as string);
-    });
-    setMetadataNotice((previous) => (previous ? null : previous));
-  };
-
-  const closeAutocomplete = useCallback(() => {
-    setActiveAutocompleteTarget(null);
-    setActiveSuggestionIndex(0);
-  }, []);
-
-  const openAutocomplete = useCallback((target: AutocompleteTarget) => {
-    setActiveAutocompleteTarget(target);
-    setActiveSuggestionIndex(0);
-  }, []);
-
-  const focusNextField = useCallback((target: AutocompleteTarget) => {
-    switch (target) {
-      case "upload-symbol":
-        uploadTimeframeRef.current?.focus();
-        return;
-      case "upload-timeframe":
-        uploadRoleRef.current?.focus();
-        return;
-      case "upload-role":
-        uploadChartLabelRef.current?.focus();
-        return;
-      case "upload-note":
-        uploadSubmitRef.current?.focus();
-        return;
-      case "edit-symbol":
-        editTimeframeRef.current?.focus();
-        return;
-      case "edit-timeframe":
-        editRoleRef.current?.focus();
-        return;
-      case "edit-role":
-        editChartLabelRef.current?.focus();
-        return;
-      case "edit-note":
-        editSubmitRef.current?.focus();
-        return;
-      default:
-        return;
-    }
-  }, []);
-
-  const acceptSuggestion = useCallback((target: AutocompleteTarget, suggestion: ChartSuggestionItem, moveFocus = false) => {
-    const field = fieldForTarget(target);
-    if (surfaceForTarget(target) === "upload") {
-      if (field === "note") {
-        updateUploadField("note", suggestion.value);
-      } else {
-        updateUploadField(field, suggestion.value);
-      }
-    } else if (editing) {
-      if (field === "note") {
-        updateEditingField("note", suggestion.value);
-      } else {
-        updateEditingField(field, suggestion.value);
-      }
-    }
-
-    closeAutocomplete();
-    if (moveFocus) {
-      window.setTimeout(() => {
-        focusNextField(target);
-      }, 0);
-    }
-  }, [closeAutocomplete, editing, focusNextField]);
-
-  const handleAutocompleteBlur = useCallback((target: AutocompleteTarget) => {
-    window.setTimeout(() => {
-      setActiveAutocompleteTarget((previous) => (previous === target ? null : previous));
-    }, 120);
-  }, []);
-
-  const handleAutocompleteKeyDown = useCallback((target: AutocompleteTarget, event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const isTargetActive = activeAutocompleteTarget === target;
-    const suggestions = isTargetActive ? activeSuggestions : [];
-
-    if (event.key === "Escape") {
-      if (isTargetActive) {
-        event.preventDefault();
-        closeAutocomplete();
-      }
-      return;
-    }
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      if (!isTargetActive) {
-        openAutocomplete(target);
-        return;
-      }
-      if (suggestions.length > 0) {
-        setActiveSuggestionIndex((previous) => (previous + 1) % suggestions.length);
-      }
-      return;
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      if (!isTargetActive) {
-        openAutocomplete(target);
-        return;
-      }
-      if (suggestions.length > 0) {
-        setActiveSuggestionIndex((previous) => (previous - 1 + suggestions.length) % suggestions.length);
-      }
-      return;
-    }
-
-    if (event.key === "Tab" && !event.shiftKey && isTargetActive && suggestions.length > 0) {
-      event.preventDefault();
-      acceptSuggestion(target, suggestions[activeSuggestionIndex] ?? suggestions[0], true);
-    }
-  }, [acceptSuggestion, activeAutocompleteTarget, activeSuggestionIndex, activeSuggestions, closeAutocomplete, openAutocomplete]);
 
   const handleUploadFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
@@ -679,10 +329,14 @@ export function TradeImageGalleryManager({
 
   const resetUploadDraft = () => {
     setUploadDraft(DEFAULT_UPLOAD_DRAFT);
-    closeAutocomplete();
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  const updateEditingField = <K extends keyof MetadataDraft>(field: K, value: MetadataDraft[K]) => {
+    setEditing((previous) => (previous ? { ...previous, [field]: value } : previous));
+    setMetadataNotice((previous) => (previous ? null : previous));
   };
 
   const handleUpload = async (event: FormEvent<HTMLFormElement>) => {
@@ -735,7 +389,6 @@ export function TradeImageGalleryManager({
       );
       setHighlightedImageUid(uploaded.imageUid);
       resetUploadDraft();
-      void loadRecentNotes();
     } catch (cause) {
       const message = normalizeRequestFailureMessage(cause, "Upload chart thất bại.");
       setUploadStatus("error");
@@ -835,7 +488,6 @@ export function TradeImageGalleryManager({
         tone: "success",
         message: `Đã lưu metadata cho chart "${updated.chartLabel}".`,
       });
-      void loadRecentNotes();
     } catch (cause) {
       const message = normalizeRequestFailureMessage(cause, "Cập nhật metadata thất bại.");
       setMetadataNotice({
@@ -878,136 +530,6 @@ export function TradeImageGalleryManager({
     [images],
   );
 
-  const renderAutocompleteDropdown = (target: AutocompleteTarget) => {
-    if (activeAutocompleteTarget !== target || activeSuggestions.length < 1) {
-      return null;
-    }
-
-    let lastGroup: string | null = null;
-
-    return (
-      <div className="zen-image-autocomplete" role="listbox">
-        {activeSuggestions.map((suggestion, index) => {
-          const group = groupLabelForSuggestion(suggestion.group);
-          const showGroup = group !== lastGroup;
-          lastGroup = group;
-          const isActive = index === activeSuggestionIndex;
-          const description = descriptionForSuggestion(suggestion);
-
-          return (
-            <div key={suggestion.id}>
-              {showGroup ? <div className="zen-image-autocomplete__group">{group}</div> : null}
-              <button
-                type="button"
-                className={`zen-image-autocomplete__item${isActive ? " zen-image-autocomplete__item--active" : ""}`}
-                onMouseEnter={() => setActiveSuggestionIndex(index)}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  acceptSuggestion(target, suggestion, false);
-                }}
-              >
-                <span className="zen-image-autocomplete__value">{suggestion.value}</span>
-                {description ? <span className="zen-image-autocomplete__summary">{description}</span> : null}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const renderField = ({ surface, field, id, label, value, placeholder, disabled }: RenderFieldArgs) => {
-    const target = `${surface}-${field}` as AutocompleteTarget;
-    const fieldRef =
-      surface === "upload"
-        ? field === "symbol"
-          ? uploadSymbolRef
-          : field === "timeframe"
-            ? uploadTimeframeRef
-            : uploadRoleRef
-        : field === "symbol"
-          ? editSymbolRef
-          : field === "timeframe"
-            ? editTimeframeRef
-            : editRoleRef;
-
-    const updateField = (nextValue: string) => {
-      if (surface === "upload") {
-        updateUploadField(field, nextValue);
-      } else {
-        updateEditingField(field, nextValue);
-      }
-    };
-
-    return (
-      <label className="zen-filter-field" htmlFor={id}>
-        <span>{label}</span>
-        <div className="zen-image-field-wrap">
-          <input
-            id={id}
-            ref={fieldRef}
-            className="zen-input zen-input--compact"
-            value={value}
-            onFocus={() => openAutocomplete(target)}
-            onBlur={() => handleAutocompleteBlur(target)}
-            onKeyDown={(event) => handleAutocompleteKeyDown(target, event)}
-            onChange={(event) => {
-              updateField(event.target.value);
-              openAutocomplete(target);
-            }}
-            placeholder={placeholder}
-            autoComplete="off"
-            spellCheck={false}
-            disabled={disabled}
-          />
-          {renderAutocompleteDropdown(target)}
-        </div>
-      </label>
-    );
-  };
-
-  const renderNoteField = (surface: FocusSurface, id: string, value: string, disabled: boolean) => {
-    const target = `${surface}-note` as AutocompleteTarget;
-    const ref = surface === "upload" ? uploadNoteRef : editNoteRef;
-
-    return (
-      <label className="zen-filter-field zen-filter-field--full" htmlFor={id}>
-        <span>Note</span>
-        <div className="zen-image-field-wrap zen-image-field-wrap--textarea">
-          <textarea
-            id={id}
-            ref={ref}
-            className="zen-input zen-input--compact"
-            rows={2}
-            value={value}
-            onFocus={() => {
-              if (value.trim()) {
-                openAutocomplete(target);
-              }
-            }}
-            onBlur={() => handleAutocompleteBlur(target)}
-            onKeyDown={(event) => handleAutocompleteKeyDown(target, event)}
-            onChange={(event) => {
-              if (surface === "upload") {
-                updateUploadField("note", event.target.value);
-              } else {
-                updateEditingField("note", event.target.value);
-              }
-              if (event.target.value.trim()) {
-                openAutocomplete(target);
-              } else if (activeAutocompleteTarget === target) {
-                closeAutocomplete();
-              }
-            }}
-            placeholder="Context + Signal + Location + Bias"
-            disabled={disabled}
-          />
-          {renderAutocompleteDropdown(target)}
-        </div>
-      </label>
-    );
-  };
-
   return (
     <section className={`zen-image-manager${compact ? " zen-image-manager--compact" : ""}`}>
       <div className="zen-image-manager__head">
@@ -1045,7 +567,7 @@ export function TradeImageGalleryManager({
 
       {canLoad ? (
         <form className="zen-image-upload-form" onSubmit={handleUpload} aria-label="Upload chart image">
-          <label className="zen-filter-field zen-filter-field--full" htmlFor={`chart-upload-file-${entryValue}`}>
+          <label className="zen-filter-field" htmlFor={`chart-upload-file-${entryValue}`}>
             <span>File image</span>
             <input
               id={`chart-upload-file-${entryValue}`}
@@ -1058,65 +580,54 @@ export function TradeImageGalleryManager({
             />
           </label>
 
-          {renderField({
-            surface: "upload",
-            field: "symbol",
-            id: `chart-upload-symbol-${entryValue}`,
-            label: "Symbol",
-            value: uploadDraft.symbol,
-            placeholder: "EURUSD",
-            disabled: uploadStatus === "uploading",
-          })}
-
-          {renderField({
-            surface: "upload",
-            field: "timeframe",
-            id: `chart-upload-timeframe-${entryValue}`,
-            label: "Timeframe",
-            value: uploadDraft.timeframe,
-            placeholder: "H1",
-            disabled: uploadStatus === "uploading",
-          })}
-
-          {renderField({
-            surface: "upload",
-            field: "role",
-            id: `chart-upload-role-${entryValue}`,
-            label: "Role",
-            value: uploadDraft.role,
-            placeholder: "SETUP",
-            disabled: uploadStatus === "uploading",
-          })}
-
-          <label className="zen-filter-field zen-filter-field--full" htmlFor={`chart-upload-label-${entryValue}`}>
-            <div className="zen-image-label-head">
-              <span>Chart label</span>
-              {uploadDraft.chartLabelManuallyEdited && buildDraftChartLabel(uploadDraft.symbol, uploadDraft.timeframe, uploadDraft.role) ? (
-                <button
-                  type="button"
-                  className="zen-chip zen-chip--ghost"
-                  onClick={() => setUploadDraft((previous) => resetChartDraftLabel(previous))}
-                  disabled={uploadStatus === "uploading"}
-                >
-                  Use standard label
-                </button>
-              ) : null}
-            </div>
+          <label className="zen-filter-field" htmlFor={`chart-upload-label-${entryValue}`}>
+            <span>Chart label</span>
             <input
               id={`chart-upload-label-${entryValue}`}
-              ref={uploadChartLabelRef}
               className="zen-input zen-input--compact"
               value={uploadDraft.chartLabel}
-              onFocus={() => closeAutocomplete()}
               onChange={(event) => updateUploadField("chartLabel", event.target.value)}
-              placeholder="EURUSD H1 SETUP"
+              placeholder="VD: UJ H1 setup"
               disabled={uploadStatus === "uploading"}
             />
-            <p className="zen-image-form-note">{helperTextForDraft(uploadDraft)}</p>
-            {uploadWarning ? <p className="zen-image-form-note zen-image-form-note--warning">{uploadWarning}</p> : null}
           </label>
 
-          {renderNoteField("upload", `chart-upload-note-${entryValue}`, uploadDraft.note, uploadStatus === "uploading")}
+          <label className="zen-filter-field" htmlFor={`chart-upload-symbol-${entryValue}`}>
+            <span>Symbol</span>
+            <input
+              id={`chart-upload-symbol-${entryValue}`}
+              className="zen-input zen-input--compact"
+              value={uploadDraft.symbol}
+              onChange={(event) => updateUploadField("symbol", event.target.value)}
+              placeholder="USDJPY"
+              disabled={uploadStatus === "uploading"}
+            />
+          </label>
+
+          <label className="zen-filter-field" htmlFor={`chart-upload-timeframe-${entryValue}`}>
+            <span>Timeframe</span>
+            <input
+              id={`chart-upload-timeframe-${entryValue}`}
+              className="zen-input zen-input--compact"
+              value={uploadDraft.timeframe}
+              onChange={(event) => updateUploadField("timeframe", event.target.value)}
+              placeholder="H1"
+              disabled={uploadStatus === "uploading"}
+            />
+          </label>
+
+          <label className="zen-filter-field zen-filter-field--full" htmlFor={`chart-upload-note-${entryValue}`}>
+            <span>Note</span>
+            <textarea
+              id={`chart-upload-note-${entryValue}`}
+              className="zen-input zen-input--compact"
+              rows={2}
+              value={uploadDraft.note}
+              onChange={(event) => updateUploadField("note", event.target.value)}
+              placeholder="Ghi chú setup/chart"
+              disabled={uploadStatus === "uploading"}
+            />
+          </label>
 
           {selectedFileMeta ? (
             <p className="zen-image-file-meta" aria-live="polite">
@@ -1126,7 +637,6 @@ export function TradeImageGalleryManager({
 
           <div className="zen-image-upload-actions">
             <button
-              ref={uploadSubmitRef}
               type="submit"
               className="zen-btn zen-btn--secondary"
               disabled={uploadStatus === "uploading" || !uploadDraft.file}
@@ -1214,10 +724,7 @@ export function TradeImageGalleryManager({
                   <button
                     type="button"
                     className="zen-chip"
-                    onClick={() => {
-                      closeAutocomplete();
-                      setEditing(isEditing ? null : createMetadataDraft(image));
-                    }}
+                    onClick={() => setEditing(isEditing ? null : createMetadataDraft(image))}
                     aria-label="Sửa metadata chart"
                     disabled={deletingUid === image.imageUid || savingMetadata}
                   >
@@ -1236,80 +743,64 @@ export function TradeImageGalleryManager({
 
                 {isEditing && editing ? (
                   <form className="zen-image-edit-form" onSubmit={handleMetadataSave} aria-label="Sửa metadata image">
-                    {renderField({
-                      surface: "edit",
-                      field: "symbol",
-                      id: `img-edit-symbol-${image.imageUid}`,
-                      label: "Symbol",
-                      value: editing.symbol,
-                      placeholder: "EURUSD",
-                      disabled: savingMetadata,
-                    })}
-
-                    {renderField({
-                      surface: "edit",
-                      field: "timeframe",
-                      id: `img-edit-timeframe-${image.imageUid}`,
-                      label: "Timeframe",
-                      value: editing.timeframe,
-                      placeholder: "H1",
-                      disabled: savingMetadata,
-                    })}
-
-                    {renderField({
-                      surface: "edit",
-                      field: "role",
-                      id: `img-edit-role-${image.imageUid}`,
-                      label: "Role",
-                      value: editing.role,
-                      placeholder: "SETUP",
-                      disabled: savingMetadata,
-                    })}
-
-                    <label className="zen-filter-field zen-filter-field--full" htmlFor={`img-edit-label-${image.imageUid}`}>
-                      <div className="zen-image-label-head">
-                        <span>Chart label</span>
-                        {editing.chartLabelManuallyEdited && buildDraftChartLabel(editing.symbol, editing.timeframe, editing.role) ? (
-                          <button
-                            type="button"
-                            className="zen-chip zen-chip--ghost"
-                            onClick={() => setEditing((previous) => (previous ? resetChartDraftLabel(previous) : previous))}
-                            disabled={savingMetadata}
-                          >
-                            Use standard label
-                          </button>
-                        ) : null}
-                      </div>
+                    <label className="zen-filter-field" htmlFor={`img-edit-label-${image.imageUid}`}>
+                      <span>Chart label</span>
                       <input
                         id={`img-edit-label-${image.imageUid}`}
-                        ref={editChartLabelRef}
                         className="zen-input zen-input--compact"
                         value={editing.chartLabel}
-                        onFocus={() => closeAutocomplete()}
                         onChange={(event) => updateEditingField("chartLabel", event.target.value)}
                         disabled={savingMetadata}
                       />
-                      <p className="zen-image-form-note">{helperTextForDraft(editing)}</p>
-                      {editWarning ? <p className="zen-image-form-note zen-image-form-note--warning">{editWarning}</p> : null}
+                    </label>
+
+                    <label className="zen-filter-field" htmlFor={`img-edit-symbol-${image.imageUid}`}>
+                      <span>Symbol</span>
+                      <input
+                        id={`img-edit-symbol-${image.imageUid}`}
+                        className="zen-input zen-input--compact"
+                        value={editing.symbol}
+                        onChange={(event) => updateEditingField("symbol", event.target.value)}
+                        disabled={savingMetadata}
+                      />
+                    </label>
+
+                    <label className="zen-filter-field" htmlFor={`img-edit-timeframe-${image.imageUid}`}>
+                      <span>Timeframe</span>
+                      <input
+                        id={`img-edit-timeframe-${image.imageUid}`}
+                        className="zen-input zen-input--compact"
+                        value={editing.timeframe}
+                        onChange={(event) => updateEditingField("timeframe", event.target.value)}
+                        disabled={savingMetadata}
+                      />
                     </label>
 
                     <label className="zen-filter-field" htmlFor={`img-edit-slot-${image.imageUid}`}>
                       <span>Image slot</span>
                       <input
                         id={`img-edit-slot-${image.imageUid}`}
-                        ref={editImageSlotRef}
                         className="zen-input zen-input--compact"
                         value={editing.imageSlot}
-                        onFocus={() => closeAutocomplete()}
                         onChange={(event) => updateEditingField("imageSlot", event.target.value)}
                         disabled={savingMetadata}
                       />
                     </label>
 
-                    {renderNoteField("edit", `img-edit-note-${image.imageUid}`, editing.note, savingMetadata)}
+                    <label className="zen-filter-field zen-filter-field--full" htmlFor={`img-edit-note-${image.imageUid}`}>
+                      <span>Note</span>
+                      <textarea
+                        id={`img-edit-note-${image.imageUid}`}
+                        className="zen-input zen-input--compact"
+                        rows={2}
+                        value={editing.note}
+                        onChange={(event) => updateEditingField("note", event.target.value)}
+                        disabled={savingMetadata}
+                      />
+                    </label>
 
                     <div className="zen-image-edit-actions">
-                      <button ref={editSubmitRef} type="submit" className="zen-btn zen-btn--secondary" disabled={savingMetadata}>
+                      <button type="submit" className="zen-btn zen-btn--secondary" disabled={savingMetadata}>
                         {savingMetadata ? "Đang lưu..." : "Lưu metadata"}
                       </button>
                     </div>

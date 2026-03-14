@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { PupperfishEvidenceItem, PupperfishPlannerMode, PupperfishRetrieveResult } from "@tungpastry/pupperfish-framework";
 
@@ -339,6 +339,12 @@ export type PupperfishChatShellProps = {
   promptHistoryEnabled?: boolean;
   promptHistoryStorageKey?: string;
   promptHistoryLimit?: number;
+  renderTradeImageManager?: (props: {
+    client: PupperfishClient;
+    entryUid: string | null;
+    title?: string;
+    compact?: boolean;
+  }) => ReactNode;
 };
 
 export function PupperfishChatShell({
@@ -349,6 +355,7 @@ export function PupperfishChatShell({
   promptHistoryEnabled = true,
   promptHistoryStorageKey = DEFAULT_PROMPT_HISTORY_STORAGE_KEY,
   promptHistoryLimit = DEFAULT_PROMPT_HISTORY_LIMIT,
+  renderTradeImageManager,
 }: PupperfishChatShellProps) {
   const [query, setQuery] = useState("");
   const [promptHistory, setPromptHistory] = useState<string[]>(() =>
@@ -1276,7 +1283,14 @@ export function PupperfishChatShell({
                 </article>
               ) : null}
 
-              <TradeImageGalleryManager client={client} entryUid={uploadEntryUid} title="Uploads" />
+              {renderTradeImageManager
+                ? renderTradeImageManager({
+                    client,
+                    entryUid: uploadEntryUid,
+                    title: "Uploads",
+                    compact: false,
+                  })
+                : <TradeImageGalleryManager client={client} entryUid={uploadEntryUid} title="Uploads" />}
             </div>
           ) : null}
 

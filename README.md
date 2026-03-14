@@ -32,7 +32,7 @@
 Pupperfish is a public library monorepo that packages a grounded assistant into two reusable pieces:
 
 - `@tungpastry/pupperfish-framework`: a headless runtime that orchestrates retrieval, answer generation, image workflows, and worker hooks.
-- `@tungpastry/pupperfish-react`: a React UI kit that renders the chat shell, widget shell, dock, and trade-image gallery.
+- `@tungpastry/pupperfish-react`: a React UI kit that renders the chat shell, widget shell, dock, and a generic trade-image gallery.
 
 Pupperfish is **not** a standalone backend app. It does not ship a database, storage backend, auth system, queue implementation, or LLM service. A host application must provide those pieces.
 
@@ -63,6 +63,7 @@ The host app owns:
 - queue and worker execution
 - audit persistence
 - API routes and auth
+- domain-specific UI workflows layered on top of the generic shell, such as product-specific chart form autocomplete
 
 That boundary keeps the assistant portable without pretending every product has the same backend.
 

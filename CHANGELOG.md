@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0
+
+- Breaking change: gỡ `listRecentChartNotes()` khỏi `PupperfishClient` để React package không mang contract host-specific của ZenLog.
+- `TradeImageGalleryManager` quay lại phạm vi generic CRUD + viewer cho chart image metadata cơ bản.
+- `PupperfishChatShell` thêm `renderTradeImageManager(...)` để host app có thể inject upload/gallery UX riêng cho domain-specific workflows.
+
 ## 0.1.7
 
 - Thêm auto complete chart form cho `TradeImageGalleryManager` với combobox `Symbol/Timeframe/Role`, chart label auto-fill có thể reset về chuẩn, và note suggestions từ recent notes + template library.
