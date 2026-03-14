@@ -457,6 +457,8 @@ export function PupperfishChatShell({
         imageUid: item.imageUid,
         fileUrl: item.fileUrl,
         chartLabel: item.chartLabel,
+        dateText: item.dateText,
+        timeText: item.timeText,
         symbol: item.symbol,
         timeframe: item.timeframe,
         note: item.note,

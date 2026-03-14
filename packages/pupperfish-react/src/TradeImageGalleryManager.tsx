@@ -518,6 +518,8 @@ export function TradeImageGalleryManager({
         imageUid: image.imageUid,
         fileUrl: imageUrlFor(image),
         chartLabel: image.chartLabel,
+        dateText: image.dateText,
+        timeText: image.timeText,
         symbol: image.symbol,
         timeframe: image.timeframe,
         note: image.note,

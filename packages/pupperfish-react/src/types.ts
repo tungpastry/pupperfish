@@ -30,6 +30,8 @@ export type PupperfishChartViewerItem = {
   imageUid?: string | null;
   fileUrl: string | null;
   chartLabel: string;
+  dateText?: string | null;
+  timeText?: string | null;
   symbol?: string | null;
   timeframe?: string | null;
   note?: string | null;

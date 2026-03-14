@@ -43,6 +43,25 @@ function formatViewerTimestamp(value: string | null | undefined): string | null 
   return date.toLocaleString("vi-VN");
 }
 
+function formatLogTime(dateText: string | null | undefined, timeText: string | null | undefined): string | null {
+  const date = (dateText ?? "").trim();
+  const time = (timeText ?? "").trim();
+
+  if (date && time) {
+    return `${date} ${time}`;
+  }
+
+  if (date) {
+    return date;
+  }
+
+  if (time) {
+    return time;
+  }
+
+  return null;
+}
+
 function cycleIndex(index: number, count: number, delta: number): number {
   if (count < 1) {
     return 0;
@@ -76,6 +95,9 @@ export function PupperfishChartViewer({
     () => [
       activeItem?.symbol ? { label: "Symbol", value: activeItem.symbol } : null,
       activeItem?.timeframe ? { label: "Timeframe", value: activeItem.timeframe } : null,
+      formatLogTime(activeItem?.dateText, activeItem?.timeText)
+        ? { label: "Log Time", value: formatLogTime(activeItem?.dateText, activeItem?.timeText) as string }
+        : null,
       typeof activeItem?.imageSlot === "number" ? { label: "Image Slot", value: `#${activeItem.imageSlot}` } : null,
       activeItem?.fileName ? { label: "File", value: activeItem.fileName } : null,
       formatViewerTimestamp(activeItem?.createdAt) ? { label: "Created", value: formatViewerTimestamp(activeItem?.createdAt) as string } : null,

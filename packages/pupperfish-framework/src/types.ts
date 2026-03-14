@@ -47,6 +47,8 @@ export type PupperfishImageEvidence = {
   id: string;
   imageUid: string;
   entryUid: string;
+  dateText?: string | null;
+  timeText?: string | null;
   chartLabel: string;
   symbol: string | null;
   timeframe: string | null;
@@ -147,6 +149,8 @@ export type PupperfishTradeImageItem = {
   id: string;
   imageUid: string;
   entryUid: string;
+  dateText?: string | null;
+  timeText?: string | null;
   imageSlot: number;
   chartLabel: string;
   symbol: string | null;

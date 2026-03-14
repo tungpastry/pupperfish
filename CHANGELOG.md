@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6
+
+- Thêm `Log Time` vào metadata panel của `PupperfishChartViewer`, dùng `dateText/timeText` của log thay vì thời điểm upload ảnh.
+- Mở rộng image contracts và ZenLog mapping để chart viewer nhận được `dateText/timeText` ở cả tab `Charts` và gallery ảnh.
+
 ## 0.1.5
 
 - Thêm prompt history recall cho `PupperfishChatShell` với `ArrowUp/ArrowDown`, restore draft đang gõ dở, và persistence qua `localStorage`.
